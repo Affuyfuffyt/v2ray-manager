@@ -242,7 +242,7 @@ def register_create_handlers(bot):
             creation_data[chat_id]['quota_bytes'] = quota_map[choice]
             finalize_creation(call.message, bot, is_manual=False)
 
-    # 10. إعطاء الملخص النهائي والاتصال الفعلي
+    # 10. إعطاء الملخص النهائي والاتصال الفعلي بالسيرفر المحلي
     def finalize_creation(message, bot, is_manual):
         chat_id = message.chat.id
         if is_manual:
@@ -255,26 +255,29 @@ def register_create_handlers(bot):
                 return
 
         data = creation_data[chat_id]
-        
-        # --- (ملاحظة: هنا مستقبلاً يتم استدعاء دالة API لإنشاء الكود الفعلي بالسيرفر) ---
-        
-        quota_display = "بلا حدود ♾️" if data['quota_bytes'] == 0 else f"{data['quota_bytes'] / (1024**3):.2f} GB"
+
+        # 🔥 استدعاء دالة إضافة المشترك للسيرفر الفعلي
+        try:
+            from xray_core.panel_api import PanelAPI
+            local_api = PanelAPI()
+            local_api.create_client(data['name'], data['uuid'])
+        except Exception as e:
+            print(f"Error connecting to local API: {e}")
+
+        # توليد رابط VLESS جاهز للنسخ
+        vless_link = f"vless://{data['uuid']}@wathfor.alwaysdata.net:443?type=ws&security=tls&path=/ashor&sni=wathfor.alwaysdata.net#{data['name']}"
         
         summary = f"""
-✅ **تم تجهيز الكود وإرساله للسيرفر!**
+✅ **تم إنشاء الكود وتفعيله بالسيرفر بنجاح!**
 
 👤 **الاسم:** `{data['name']}`
-🌐 **البروتوكول:** `{data['protocol'].upper()}`
-🚪 **البورت:** `{data['port']}`
-🛤️ **المسار:** `{data['path']}`
-🔑 **المعرف:** `{data['uuid']}`
-👥 **الأجهزة المتصلة:** `{data['ips']}`
 ⏳ **المدة:** `{data['duration']} أيام`
-📊 **السعة:** `{quota_display}`
 
-*(سيتم إضافة زر حفظ البيانات وعرض الكود المشفر في ملف إدارة المشتركين)*
+🔗 **انسخ الكود أدناه والصقه في تطبيق (DarkTunnel أو v2rayNG):**
+`{vless_link}`
         """
         
         bot.send_message(chat_id, summary, parse_mode="Markdown")
+        
         # تنظيف الذاكرة بعد الاكتمال
         creation_data.pop(chat_id, None)
