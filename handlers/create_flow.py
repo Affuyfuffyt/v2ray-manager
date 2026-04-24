@@ -62,7 +62,7 @@ def register_create_handlers(bot):
         creation_data[chat_id]['port'] = int(message.text)
         ask_ws(chat_id, bot)
 
-    # 4. اختيار نوع النقل (WS)
+    # 4. اختيار نوع النقل (WS) وتخطي المسار (Path)
     def ask_ws(chat_id, bot, message_id=None):
         markup = InlineKeyboardMarkup()
         markup.add(InlineKeyboardButton("WebSocket (WS) 🌐", callback_data="net_ws"))
@@ -76,35 +76,11 @@ def register_create_handlers(bot):
     def process_ws(call):
         chat_id = call.message.chat.id
         creation_data[chat_id]['network'] = 'ws'
-        
-        markup = InlineKeyboardMarkup(row_width=2)
-        markup.add(
-            InlineKeyboardButton("Path عشوائي 🎲", callback_data="path_random"),
-            InlineKeyboardButton("Path يدوي ✍️", callback_data="path_manual")
-        )
-        bot.edit_message_text("🛤️ اختر المسار (Path):", chat_id, call.message.message_id, reply_markup=markup)
+        # تم تحديد المسار إجبارياً ليتطابق مع السيرفر
+        creation_data[chat_id]['path'] = '/ashor'
+        ask_uuid(chat_id, bot, call.message.message_id)
 
-    # 5. اختيار المسار (Path)
-    @bot.callback_query_handler(func=lambda call: call.data.startswith("path_"))
-    def process_path(call):
-        chat_id = call.message.chat.id
-        choice = call.data.split('_')[1]
-        
-        if choice == "random":
-            random_path = '/' + ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
-            creation_data[chat_id]['path'] = random_path
-            ask_uuid(chat_id, bot, call.message.message_id)
-        else:
-            msg = bot.send_message(chat_id, "✍️ أرسل المسار (يجب أن يبدأ بـ / كمثال: /speed):")
-            bot.register_next_step_handler(msg, lambda m: save_path_and_ask_uuid(m, bot))
-
-    def save_path_and_ask_uuid(message, bot):
-        chat_id = message.chat.id
-        path = message.text if message.text.startswith('/') else '/' + message.text
-        creation_data[chat_id]['path'] = path
-        ask_uuid(chat_id, bot)
-
-    # 6. اختيار المعرف (UUID / Password)
+    # 5. اختيار المعرف (UUID)
     def ask_uuid(chat_id, bot, message_id=None):
         markup = InlineKeyboardMarkup(row_width=2)
         markup.add(
@@ -134,7 +110,7 @@ def register_create_handlers(bot):
         creation_data[chat_id]['uuid'] = message.text
         ask_ips(chat_id, bot)
 
-    # 7. تحديد عدد الأجهزة (Concurrent IPs)
+    # 6. تحديد عدد الأجهزة (Concurrent IPs)
     def ask_ips(chat_id, bot, message_id=None):
         markup = InlineKeyboardMarkup(row_width=2)
         markup.add(
@@ -168,7 +144,7 @@ def register_create_handlers(bot):
             msg = bot.send_message(chat_id, "❌ خطأ! أرسل رقماً صحيحاً للأجهزة:")
             bot.register_next_step_handler(msg, lambda m: save_ips_and_ask_duration(m, bot))
 
-    # 8. تحديد المدة (Duration)
+    # 7. تحديد المدة (Duration)
     def ask_duration(chat_id, bot, message_id=None):
         markup = InlineKeyboardMarkup(row_width=3)
         markup.add(
@@ -207,7 +183,7 @@ def register_create_handlers(bot):
             msg = bot.send_message(chat_id, "❌ خطأ! أرسل المدة بالأيام كرقم صحيح:")
             bot.register_next_step_handler(msg, lambda m: save_duration_and_ask_quota(m, bot))
 
-    # 9. تحديد السعة (Quota)
+    # 8. تحديد السعة (Quota)
     def ask_quota(chat_id, bot, message_id=None):
         markup = InlineKeyboardMarkup(row_width=2)
         markup.add(
@@ -243,7 +219,7 @@ def register_create_handlers(bot):
             creation_data[chat_id]['quota_bytes'] = quota_map[choice]
             finalize_creation(call.message, bot, is_manual=False)
 
-    # 10. إعطاء الملخص النهائي والاتصال الفعلي بالسيرفر المحلي
+    # 9. إعطاء الملخص النهائي والاتصال الفعلي بالسيرفر المحلي
     def finalize_creation(message, bot, is_manual):
         chat_id = message.chat.id
         if is_manual:
@@ -265,10 +241,11 @@ def register_create_handlers(bot):
         except Exception as e:
             print(f"Error connecting to local API: {e}")
 
-        # === التحديث الجديد: برمجة البروتوكول والبورت ديناميكياً ===
+        # === التحديث الجديد: إصلاح المسار ديناميكياً ===
         protocol = data.get('protocol', 'vless').lower()
         selected_port = data.get('port', 443)
         host_domain = "wathfor.alwaysdata.net"
+        fixed_path = "/ashor" # المسار الثابت للسيرفر
         
         # إعدادات الأمان حسب البورت
         if selected_port == 443:
@@ -280,15 +257,14 @@ def register_create_handlers(bot):
             sni_param = ""
             sni_str = ""
 
-        # توليد الرابط حسب البروتوكول المختار
+        # توليد الرابط حسب البروتوكول المختار مع إجبار المسار الصحيح
         if protocol == "vless":
-            final_link = f"vless://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={data['path']}{sni_str}#{data['name']}"
+            final_link = f"vless://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={fixed_path}{sni_str}#{data['name']}"
             
         elif protocol == "trojan":
-            final_link = f"trojan://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={data['path']}{sni_str}#{data['name']}"
+            final_link = f"trojan://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={fixed_path}{sni_str}#{data['name']}"
             
         elif protocol == "vmess":
-            # VMESS يحتاج تشفير بصيغة JSON ثم Base64
             vmess_dict = {
                 "v": "2",
                 "ps": data['name'],
@@ -299,8 +275,8 @@ def register_create_handlers(bot):
                 "scy": "auto",
                 "net": "ws",
                 "type": "none",
-                "host": sni_param,
-                "path": data['path'],
+                "host": host_domain,
+                "path": fixed_path,
                 "tls": security_type,
                 "sni": sni_param,
                 "alpn": ""
@@ -309,8 +285,7 @@ def register_create_handlers(bot):
             vmess_b64 = base64.b64encode(vmess_json.encode('utf-8')).decode('utf-8')
             final_link = f"vmess://{vmess_b64}"
         else:
-            # احتياطياً إذا صار أي خطأ نرجعه VLESS
-            final_link = f"vless://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={data['path']}{sni_str}#{data['name']}"
+            final_link = f"vless://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={fixed_path}{sni_str}#{data['name']}"
         
         quota_display = "بلا حدود ♾️" if data['quota_bytes'] == 0 else f"{data['quota_bytes'] / (1024**3):.2f} GB"
         
@@ -320,7 +295,7 @@ def register_create_handlers(bot):
 👤 **الاسم:** `{data['name']}`
 🌐 **البروتوكول:** `{protocol.upper()}`
 🚪 **البورت:** `{selected_port}`
-🛤️ **المسار:** `{data['path']}`
+🛤️ **المسار:** `{fixed_path}`
 🔑 **المعرف:** `{data['uuid']}`
 👥 **الأجهزة المتصلة:** `{data['ips']}`
 ⏳ **المدة:** `{data['duration']} أيام`
