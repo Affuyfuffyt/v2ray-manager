@@ -1,48 +1,69 @@
 import json
 import os
-import time
+import requests
+from dotenv import load_dotenv
 
-# مسار ملف الإعدادات ومحرك Xray
+# مسارات الملفات
 CONFIG_PATH = os.path.expanduser('~/xray_core/config.json')
-XRAY_BIN = os.path.expanduser('~/xray_core/xray')
 
 class PanelAPI:
     def __init__(self):
-        pass
+        # تحميل المفاتيح من ملف .env المخفي
+        load_dotenv()
+        self.api_key = os.getenv('AD_API_KEY')
+        self.site_id = os.getenv('AD_SITE_ID')
 
     def create_client(self, email, uuid):
         try:
+            # 1. قراءة الملف
             with open(CONFIG_PATH, 'r') as f:
                 config = json.load(f)
             
+            # 2. تجهيز بيانات المشترك
             new_client = {
                 "id": uuid,
                 "email": email
             }
             
+            # 3. إضافته للقائمة
             clients = config['inbounds'][0]['settings']['clients']
             if not any(c.get('email') == email for c in clients):
                 clients.append(new_client)
             
+            # 4. حفظ التعديلات
             with open(CONFIG_PATH, 'w') as f:
                 json.dump(config, f, indent=2)
             
-            self.restart_xray()
-            return True
+            # 5. ريستارت رسمي للسيرفر
+            return self.restart_xray()
             
         except Exception as e:
             print(f"Error creating client locally: {e}")
             return False
 
     def restart_xray(self):
-        # 1. إيقاف قاسي ومباشر لضمان تفريغ البورت فوراً
-        os.system("pkill -9 -f xray")
-        time.sleep(2) # مهلة قصيرة لتأكيد الإغلاق
+        # تنفيذ ريستارت رسمي للموقع عبر API منصة Alwaysdata
+        if self.api_key and self.site_id:
+            try:
+                url = f"https://api.alwaysdata.com/v1/site/{self.site_id}/restart/"
+                # استخدام مفتاح الـ API كـ Username والـ Password يترك فارغاً
+                response = requests.post(url, auth=(self.api_key, ''))
+                
+                if response.status_code == 204:
+                    print("✅ Successfully restarted site via API")
+                    return True
+                else:
+                    print(f"⚠️ API Restart failed with status: {response.status_code}")
+            except Exception as e:
+                print(f"API Restart Error: {e}")
         
-        # 2. تشغيل المحرك يدوياً من البوت مباشرة (تخطي انتظار Alwaysdata)
-        os.system(f"nohup {XRAY_BIN} run -c {CONFIG_PATH} > /dev/null 2>&1 &")
+        # حل بديل (Fallback) في حال فشل الـ API
+        print("🔄 Falling back to manual process kill")
+        os.system("pkill -9 xray")
+        return True
 
     def get_client_traffic(self, email):
+        # الاستهلاك يعود كـ 0 حالياً
         return 0
 
     def change_client_status(self, email, inbound_id=None, uuid=None, enable=True):
@@ -53,16 +74,17 @@ class PanelAPI:
             clients = config['inbounds'][0]['settings']['clients']
             
             if not enable:
+                # حذف
                 config['inbounds'][0]['settings']['clients'] = [c for c in clients if c.get('email') != email]
             else:
+                # إعادة تفعيل
                 if uuid and not any(c.get('email') == email for c in clients):
                     config['inbounds'][0]['settings']['clients'].append({"id": uuid, "email": email})
             
             with open(CONFIG_PATH, 'w') as f:
                 json.dump(config, f, indent=2)
                 
-            self.restart_xray()
-            return True
+            return self.restart_xray()
             
         except Exception as e:
             print(f"Error changing status: {e}")
