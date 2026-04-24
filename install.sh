@@ -16,12 +16,12 @@ WORK_DIR="$HOME/v2ray_manager"
 rm -rf $WORK_DIR
 mkdir -p $WORK_DIR
 
-# 3. سحب الملفات من مستودعك على كيت هب (أولاً)
+# 3. سحب الملفات من كيت هب (أولاً)
 echo "[+] جاري سحب ملفات النظام..."
 git clone https://github.com/Affuyfuffyt/v2ray-manager.git $WORK_DIR
 cd $WORK_DIR
 
-# 4. إنشاء ملف .env المخفي وحفظ البيانات (ثانياً)
+# 4. إنشاء ملف .env (ثانياً)
 cat <<EOF > .env
 BOT_TOKEN=$BOT_TOKEN
 ADMIN_ID=$ADMIN_ID
