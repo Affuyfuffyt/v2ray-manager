@@ -76,8 +76,6 @@ def register_create_handlers(bot):
     def process_ws(call):
         chat_id = call.message.chat.id
         creation_data[chat_id]['network'] = 'ws'
-        # تم تحديد المسار إجبارياً ليتطابق مع طلبك
-        creation_data[chat_id]['path'] = '/Telegram-@338888'
         ask_uuid(chat_id, bot, call.message.message_id)
 
     # 5. اختيار المعرف (UUID)
@@ -232,20 +230,22 @@ def register_create_handlers(bot):
                 return
 
         data = creation_data[chat_id]
+        protocol = data.get('protocol', 'vless').lower()
 
-        # إضافة المشترك للسيرفر الفعلي
+        # === التحديث الجديد: تحديد المسار الذكي حسب البروتوكول ===
+        fixed_path = f"/Telegram-@338888-{protocol}"
+        data['path'] = fixed_path
+
+        # إضافة المشترك للسيرفر الفعلي وإرسال نوع البروتوكول للفرز
         try:
             from xray_core.panel_api import PanelAPI
             local_api = PanelAPI()
-            local_api.create_client(data['name'], data['uuid'])
+            local_api.create_client(data['name'], data['uuid'], protocol)
         except Exception as e:
             print(f"Error connecting to local API: {e}")
 
-        # === التحديث الجديد: إصلاح المسار ديناميكياً ===
-        protocol = data.get('protocol', 'vless').lower()
         selected_port = data.get('port', 443)
         host_domain = "wathfor.alwaysdata.net"
-        fixed_path = "/Telegram-@338888" # المسار الثابت الجديد
         
         # إعدادات الأمان حسب البورت
         if selected_port == 443:
@@ -257,7 +257,7 @@ def register_create_handlers(bot):
             sni_param = ""
             sni_str = ""
 
-        # توليد الرابط حسب البروتوكول المختار مع إجبار المسار الصحيح
+        # توليد الرابط حسب البروتوكول المختار مع إجبار المسار الذكي
         if protocol == "vless":
             final_link = f"vless://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={fixed_path}{sni_str}#{data['name']}"
             
