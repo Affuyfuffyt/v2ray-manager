@@ -1,5 +1,6 @@
 import json
 import os
+import time
 
 # مسار ملف الإعدادات الخاص بمحرك Xray في Alwaysdata
 CONFIG_PATH = os.path.expanduser('~/xray_core/config.json')
@@ -31,7 +32,7 @@ class PanelAPI:
             with open(CONFIG_PATH, 'w') as f:
                 json.dump(config, f, indent=2)
             
-            # 5. تطبيق التحديثات
+            # 5. تطبيق التحديثات وعمل ريستارت تلقائي
             self.restart_xray()
             return True
             
@@ -40,8 +41,10 @@ class PanelAPI:
             return False
 
     def restart_xray(self):
-        # قتل المحرك الحالي.. وموقع Alwaysdata سيقوم بإعادة تشغيله تلقائياً فوراً
-        os.system("pkill -9 xray")
+        # 1. إيقاف ناعم للمحرك لتفريغ بورت 8100 بدون أخطاء (TIME_WAIT)
+        os.system("pkill -15 -f xray")
+        # 2. إعطاء مهلة ثانيتين لنظام Alwaysdata ليعيد التشغيل برمجياً تلقائياً
+        time.sleep(2)
 
     def get_client_traffic(self, email):
         # بما أننا نستخدم محرك خام حالياً، سنعيد 0 
@@ -60,11 +63,11 @@ class PanelAPI:
                 # حذف المشترك (حظر)
                 config['inbounds'][0]['settings']['clients'] = [c for c in clients if c.get('email') != email]
             else:
-                # إعادة التفعيل
+                # إعادة التفعيل (تمديد)
                 if uuid and not any(c.get('email') == email for c in clients):
                     config['inbounds'][0]['settings']['clients'].append({"id": uuid, "email": email})
             
-            # حفظ التعديلات وإعادة التشغيل
+            # حفظ التعديلات وإعادة التشغيل التلقائي
             with open(CONFIG_PATH, 'w') as f:
                 json.dump(config, f, indent=2)
                 
