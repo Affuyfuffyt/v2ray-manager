@@ -1,10 +1,7 @@
 import telebot
-import threading
-import time
 import config
 from xray_core.panel_api import PanelAPI
 from handlers import admin_start, create_flow, manage_flow
-from anti_share import start_monitor # 👈 استيراد نظام الحماية
 
 # 1. تهيئة البوت والـ API
 bot = telebot.TeleBot(config.BOT_TOKEN)
@@ -27,16 +24,11 @@ def start(message):
     admin_start.show_main_menu(bot, message.chat.id)
 
 # ---------------------------------------------------------
-# 4. تشغيل البوت ونظام الحماية
+# 4. تشغيل البوت
 # ---------------------------------------------------------
 if __name__ == "__main__":
     print(f"🚀 البوت يعمل الآن للأدمن ID: {config.ADMIN_ID}")
     
-    # 👈 تشغيل نظام الطرد الذكي في خيط (Thread) منفصل بالخلفية
-    monitor_thread = threading.Thread(target=start_monitor, daemon=True)
-    monitor_thread.start()
-    print("🛡️ تم تشغيل نظام الحماية Anti-Share بالخلفية.")
-
     try:
         bot.infinity_polling()
     except Exception as e:
