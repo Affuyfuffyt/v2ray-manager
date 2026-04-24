@@ -6,6 +6,7 @@ import config
 from database import db
 from xray_core.panel_api import PanelAPI
 from handlers import admin_start, create_flow, manage_flow
+from anti_share import start_monitor # 👈 استيراد نظام الحماية الجديد
 
 # 1. تهيئة البوت والـ API وقاعدة البيانات
 bot = telebot.TeleBot(config.BOT_TOKEN)
@@ -52,10 +53,16 @@ scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
 scheduler_thread.start()
 
 # ---------------------------------------------------------
-# 5. تشغيل البوت
+# 5. تشغيل البوت ونظام الحماية
 # ---------------------------------------------------------
 if __name__ == "__main__":
     print(f"🚀 البوت يعمل الآن للأدمن ID: {config.ADMIN_ID}")
+    
+    # 👈 تشغيل نظام الطرد الذكي في خيط (Thread) منفصل
+    monitor_thread = threading.Thread(target=start_monitor, daemon=True)
+    monitor_thread.start()
+    print("🛡️ تم تشغيل نظام الحماية Anti-Share بالخلفية.")
+
     try:
         bot.infinity_polling()
     except Exception as e:
