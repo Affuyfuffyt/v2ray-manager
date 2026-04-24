@@ -19,19 +19,19 @@ class PanelAPI:
             with open(CONFIG_PATH, 'r') as f:
                 config = json.load(f)
             
-            # 2. تحديد الغرفة (Inbound) وصيغة الكود حسب البروتوكول
+            # 2. تحديد الغرفة (Inbound) وصيغة الكود وإضافة (level: 0) لتفعيل العداد الداخلي
             if protocol == "vless":
                 target_inbound = 1
-                new_client = {"id": uuid, "email": email}
+                new_client = {"id": uuid, "email": email, "level": 0}
             elif protocol == "vmess":
                 target_inbound = 2
-                new_client = {"id": uuid, "email": email}
+                new_client = {"id": uuid, "email": email, "level": 0}
             elif protocol == "trojan":
                 target_inbound = 3
-                new_client = {"password": uuid, "email": email} # Trojan يستخدم كلمة password بدل id
+                new_client = {"password": uuid, "email": email, "level": 0} # Trojan يستخدم كلمة password بدل id
             else:
                 target_inbound = 1
-                new_client = {"id": uuid, "email": email}
+                new_client = {"id": uuid, "email": email, "level": 0}
             
             # 3. إضافته للقائمة الصحيحة داخل ملف الإعدادات
             clients = config['inbounds'][target_inbound]['settings']['clients']
@@ -71,7 +71,7 @@ class PanelAPI:
         return True
 
     def get_client_traffic(self, email):
-        # الاستهلاك يعود كـ 0 حالياً (لأننا نستخدم السيرفر المحلي الخام)
+        # الاستهلاك يعود كـ 0 حالياً (لأن العداد الذكي الخارجي هو من يقوم بالحساب الآن)
         return 0
 
     def change_client_status(self, email, inbound_id=None, uuid=None, enable=True):
@@ -84,7 +84,7 @@ class PanelAPI:
                 try:
                     clients = config['inbounds'][i]['settings']['clients']
                     if not enable:
-                        # حذف المشترك (حظر)
+                        # حذف المشترك (حظر وقطع النت نهائياً)
                         config['inbounds'][i]['settings']['clients'] = [c for c in clients if c.get('email') != email]
                 except Exception:
                     continue
