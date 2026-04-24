@@ -2,37 +2,31 @@ import json
 import os
 import time
 
-# مسار ملف الإعدادات الخاص بمحرك Xray في Alwaysdata
+# مسار ملف الإعدادات ومحرك Xray
 CONFIG_PATH = os.path.expanduser('~/xray_core/config.json')
+XRAY_BIN = os.path.expanduser('~/xray_core/xray')
 
 class PanelAPI:
     def __init__(self):
-        # لم نعد بحاجة للاتصال عبر الإنترنت بلوحة خارجية
         pass
 
     def create_client(self, email, uuid):
-        # هذه الدالة تضيف المشترك الجديد لملف الإعدادات المحلي
         try:
-            # 1. قراءة الملف
             with open(CONFIG_PATH, 'r') as f:
                 config = json.load(f)
             
-            # 2. تجهيز بيانات المشترك
             new_client = {
                 "id": uuid,
                 "email": email
             }
             
-            # 3. إضافته لقائمة المشتركين
             clients = config['inbounds'][0]['settings']['clients']
             if not any(c.get('email') == email for c in clients):
                 clients.append(new_client)
             
-            # 4. حفظ الملف بعد التعديل
             with open(CONFIG_PATH, 'w') as f:
                 json.dump(config, f, indent=2)
             
-            # 5. تطبيق التحديثات وعمل ريستارت تلقائي
             self.restart_xray()
             return True
             
@@ -41,18 +35,17 @@ class PanelAPI:
             return False
 
     def restart_xray(self):
-        # 1. إيقاف ناعم للمحرك لتفريغ بورت 8100 بدون أخطاء (TIME_WAIT)
-        os.system("pkill -15 -f xray")
-        # 2. إعطاء مهلة ثانيتين لنظام Alwaysdata ليعيد التشغيل برمجياً تلقائياً
-        time.sleep(2)
+        # 1. إيقاف قاسي ومباشر لضمان تفريغ البورت فوراً
+        os.system("pkill -9 -f xray")
+        time.sleep(2) # مهلة قصيرة لتأكيد الإغلاق
+        
+        # 2. تشغيل المحرك يدوياً من البوت مباشرة (تخطي انتظار Alwaysdata)
+        os.system(f"nohup {XRAY_BIN} run -c {CONFIG_PATH} > /dev/null 2>&1 &")
 
     def get_client_traffic(self, email):
-        # بما أننا نستخدم محرك خام حالياً، سنعيد 0 
-        # (مستقبلاً يمكننا تفعيل ميزة Stats API لحساب الجيجات)
         return 0
 
     def change_client_status(self, email, inbound_id=None, uuid=None, enable=True):
-        # هذه الدالة تقوم بحظر المشترك (عن طريق حذفه من الملف) أو إعادة تفعيله
         try:
             with open(CONFIG_PATH, 'r') as f:
                 config = json.load(f)
@@ -60,14 +53,11 @@ class PanelAPI:
             clients = config['inbounds'][0]['settings']['clients']
             
             if not enable:
-                # حذف المشترك (حظر)
                 config['inbounds'][0]['settings']['clients'] = [c for c in clients if c.get('email') != email]
             else:
-                # إعادة التفعيل (تمديد)
                 if uuid and not any(c.get('email') == email for c in clients):
                     config['inbounds'][0]['settings']['clients'].append({"id": uuid, "email": email})
             
-            # حفظ التعديلات وإعادة التشغيل التلقائي
             with open(CONFIG_PATH, 'w') as f:
                 json.dump(config, f, indent=2)
                 
