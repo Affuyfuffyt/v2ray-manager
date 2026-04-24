@@ -1,4 +1,9 @@
 {
+  "log": {
+    "access": "/home/wathfor/xray_core/access.log",
+    "error": "none",
+    "loglevel": "warning"
+  },
   "inbounds": [
     {
       "port": 8100,
