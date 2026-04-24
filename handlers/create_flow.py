@@ -2,6 +2,8 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import uuid
 import random
 import string
+import json
+import base64
 
 # قاموس لحفظ بيانات الإنشاء المؤقتة قبل إرسالها للسيرفر
 creation_data = {}
@@ -231,7 +233,6 @@ def register_create_handlers(bot):
             msg = bot.send_message(chat_id, "✍️ أرسل السعة بالجيجابايت (مثال: 50):")
             bot.register_next_step_handler(msg, lambda m: finalize_creation(m, bot, is_manual=True))
         else:
-            # تحويل القيم إلى بايت (Bytes) ليتوافق مع API السيرفر
             quota_map = {
                 "10m": 10 * 1024 * 1024,
                 "100m": 100 * 1024 * 1024,
@@ -256,7 +257,7 @@ def register_create_handlers(bot):
 
         data = creation_data[chat_id]
 
-        # 🔥 استدعاء دالة إضافة المشترك للسيرفر الفعلي
+        # إضافة المشترك للسيرفر الفعلي
         try:
             from xray_core.panel_api import PanelAPI
             local_api = PanelAPI()
@@ -264,19 +265,52 @@ def register_create_handlers(bot):
         except Exception as e:
             print(f"Error connecting to local API: {e}")
 
-        # === التحديث الجديد: برمجة البورت والأمان ديناميكياً ===
-        selected_port = data.get('port', 443) # قراءة البورت من اختيارات البوت
+        # === التحديث الجديد: برمجة البروتوكول والبورت ديناميكياً ===
+        protocol = data.get('protocol', 'vless').lower()
+        selected_port = data.get('port', 443)
+        host_domain = "wathfor.alwaysdata.net"
         
+        # إعدادات الأمان حسب البورت
         if selected_port == 443:
             security_type = "tls"
-            sni_param = "&sni=wathfor.alwaysdata.net"
+            sni_param = host_domain
+            sni_str = f"&sni={sni_param}"
         else:
-            # إذا كان البورت 80 أو أي بورت آخر، نلغي الـ TLS
             security_type = "none"
-            sni_param = "" 
+            sni_param = ""
+            sni_str = ""
 
-        # توليد رابط VLESS جاهز ومطابق للاختيارات
-        vless_link = f"vless://{data['uuid']}@wathfor.alwaysdata.net:{selected_port}?type=ws&security={security_type}&path=/ashor{sni_param}#{data['name']}"
+        # توليد الرابط حسب البروتوكول المختار
+        if protocol == "vless":
+            final_link = f"vless://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={data['path']}{sni_str}#{data['name']}"
+            
+        elif protocol == "trojan":
+            final_link = f"trojan://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={data['path']}{sni_str}#{data['name']}"
+            
+        elif protocol == "vmess":
+            # VMESS يحتاج تشفير بصيغة JSON ثم Base64
+            vmess_dict = {
+                "v": "2",
+                "ps": data['name'],
+                "add": host_domain,
+                "port": str(selected_port),
+                "id": data['uuid'],
+                "aid": "0",
+                "scy": "auto",
+                "net": "ws",
+                "type": "none",
+                "host": sni_param,
+                "path": data['path'],
+                "tls": security_type,
+                "sni": sni_param,
+                "alpn": ""
+            }
+            vmess_json = json.dumps(vmess_dict)
+            vmess_b64 = base64.b64encode(vmess_json.encode('utf-8')).decode('utf-8')
+            final_link = f"vmess://{vmess_b64}"
+        else:
+            # احتياطياً إذا صار أي خطأ نرجعه VLESS
+            final_link = f"vless://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={data['path']}{sni_str}#{data['name']}"
         
         quota_display = "بلا حدود ♾️" if data['quota_bytes'] == 0 else f"{data['quota_bytes'] / (1024**3):.2f} GB"
         
@@ -284,7 +318,7 @@ def register_create_handlers(bot):
 ✅ **تم إنشاء الكود وتفعيله بالسيرفر بنجاح!**
 
 👤 **الاسم:** `{data['name']}`
-🌐 **البروتوكول:** `{data['protocol'].upper()}`
+🌐 **البروتوكول:** `{protocol.upper()}`
 🚪 **البورت:** `{selected_port}`
 🛤️ **المسار:** `{data['path']}`
 🔑 **المعرف:** `{data['uuid']}`
@@ -293,7 +327,7 @@ def register_create_handlers(bot):
 📊 **السعة:** `{quota_display}`
 
 🔗 **انسخ الكود أدناه والصقه في تطبيق (DarkTunnel أو v2rayNG):**
-`{vless_link}`
+`{final_link}`
         """
         
         bot.send_message(chat_id, summary, parse_mode="Markdown")
