@@ -76,6 +76,8 @@ def register_create_handlers(bot):
     def process_ws(call):
         chat_id = call.message.chat.id
         creation_data[chat_id]['network'] = 'ws'
+        # تم تحديد المسار إجبارياً ليتطابق مع طلبك
+        creation_data[chat_id]['path'] = '/Telegram-@338888'
         ask_uuid(chat_id, bot, call.message.message_id)
 
     # 5. اختيار المعرف (UUID)
@@ -243,6 +245,13 @@ def register_create_handlers(bot):
             local_api.create_client(data['name'], data['uuid'], protocol)
         except Exception as e:
             print(f"Error connecting to local API: {e}")
+
+        # === حفظ المشترك وعدد الأجهزة المسموحة في قاعدة البيانات للحماية ===
+        try:
+            from database import save_user
+            save_user(data['name'], data['uuid'], data['ips'])
+        except Exception as e:
+            print(f"Error saving to DB: {e}")
 
         selected_port = data.get('port', 443)
         host_domain = "wathfor.alwaysdata.net"
