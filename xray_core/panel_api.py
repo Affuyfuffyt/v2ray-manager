@@ -13,20 +13,28 @@ class PanelAPI:
         self.api_key = os.getenv('AD_API_KEY')
         self.site_id = os.getenv('AD_SITE_ID')
 
-    def create_client(self, email, uuid):
+    def create_client(self, email, uuid, protocol="vless"):
         try:
             # 1. قراءة الملف
             with open(CONFIG_PATH, 'r') as f:
                 config = json.load(f)
             
-            # 2. تجهيز بيانات المشترك
-            new_client = {
-                "id": uuid,
-                "email": email
-            }
+            # 2. تحديد الغرفة (Inbound) وصيغة الكود حسب البروتوكول
+            if protocol == "vless":
+                target_inbound = 1
+                new_client = {"id": uuid, "email": email}
+            elif protocol == "vmess":
+                target_inbound = 2
+                new_client = {"id": uuid, "email": email}
+            elif protocol == "trojan":
+                target_inbound = 3
+                new_client = {"password": uuid, "email": email} # Trojan يستخدم كلمة password بدل id
+            else:
+                target_inbound = 1
+                new_client = {"id": uuid, "email": email}
             
-            # 3. إضافته للقائمة
-            clients = config['inbounds'][0]['settings']['clients']
+            # 3. إضافته للقائمة الصحيحة داخل ملف الإعدادات
+            clients = config['inbounds'][target_inbound]['settings']['clients']
             if not any(c.get('email') == email for c in clients):
                 clients.append(new_client)
             
@@ -63,7 +71,7 @@ class PanelAPI:
         return True
 
     def get_client_traffic(self, email):
-        # الاستهلاك يعود كـ 0 حالياً
+        # الاستهلاك يعود كـ 0 حالياً (لأننا نستخدم السيرفر المحلي الخام)
         return 0
 
     def change_client_status(self, email, inbound_id=None, uuid=None, enable=True):
@@ -71,15 +79,15 @@ class PanelAPI:
             with open(CONFIG_PATH, 'r') as f:
                 config = json.load(f)
             
-            clients = config['inbounds'][0]['settings']['clients']
-            
-            if not enable:
-                # حذف
-                config['inbounds'][0]['settings']['clients'] = [c for c in clients if c.get('email') != email]
-            else:
-                # إعادة تفعيل
-                if uuid and not any(c.get('email') == email for c in clients):
-                    config['inbounds'][0]['settings']['clients'].append({"id": uuid, "email": email})
+            # البحث والحذف في كل الغرف (1, 2, 3) 
+            for i in range(1, 4):
+                try:
+                    clients = config['inbounds'][i]['settings']['clients']
+                    if not enable:
+                        # حذف المشترك (حظر)
+                        config['inbounds'][i]['settings']['clients'] = [c for c in clients if c.get('email') != email]
+                except Exception:
+                    continue
             
             with open(CONFIG_PATH, 'w') as f:
                 json.dump(config, f, indent=2)
