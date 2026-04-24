@@ -4,19 +4,24 @@ echo "=================================================="
 echo "  🚀 أداة إدارة V2Ray الاحترافية (نسخة Alwaysdata) "
 echo "=================================================="
 
-# 1. أخذ التوكن والآيدي من المستخدم أثناء التثبيت
+# 1. أخذ البيانات
 read -p "🔑 أدخل توكن البوت (Bot Token): " BOT_TOKEN
 read -p "👑 أدخل الآيدي الخاص بك (Admin ID): " ADMIN_ID
 read -p "🌐 أدخل رابط لوحة السيرفر (مثال http://1.1.1.1:2053): " PANEL_URL
 read -p "👤 أدخل يوزر لوحة السيرفر: " PANEL_USER
 read -p "🔒 أدخل باسورد لوحة السيرفر: " PANEL_PASS
 
-# 2. إنشاء بيئة العمل
+# 2. إنشاء بيئة العمل وتنظيفها إذا كانت موجودة لتجنب الأخطاء
 WORK_DIR="$HOME/v2ray_manager"
+rm -rf $WORK_DIR
 mkdir -p $WORK_DIR
+
+# 3. سحب الملفات من مستودعك على كيت هب (أولاً)
+echo "[+] جاري سحب ملفات النظام..."
+git clone https://github.com/Affuyfuffyt/v2ray-manager.git $WORK_DIR
 cd $WORK_DIR
 
-# 3. حفظ البيانات الحساسة في ملف مخفي
+# 4. إنشاء ملف .env المخفي وحفظ البيانات (ثانياً)
 cat <<EOF > .env
 BOT_TOKEN=$BOT_TOKEN
 ADMIN_ID=$ADMIN_ID
@@ -25,11 +30,7 @@ PANEL_USER=$PANEL_USER
 PANEL_PASS=$PANEL_PASS
 EOF
 
-# 4. سحب الملفات من مستودعك على كيت هب (تستبدل USER و REPO باسم حسابك)
-echo "[+] جاري سحب ملفات النظام..."
-git clone https://github.com/USER/REPO.git .
-
-# 5. تثبيت المكاتب (Telebot, SQLite, Requests, Schedule)
+# 5. تثبيت المكاتب
 echo "[+] جاري تثبيت المتطلبات..."
 pip install -r requirements.txt
 
