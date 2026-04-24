@@ -264,14 +264,33 @@ def register_create_handlers(bot):
         except Exception as e:
             print(f"Error connecting to local API: {e}")
 
-        # توليد رابط VLESS جاهز للنسخ
-        vless_link = f"vless://{data['uuid']}@wathfor.alwaysdata.net:443?type=ws&security=tls&path=/ashor&sni=wathfor.alwaysdata.net#{data['name']}"
+        # === التحديث الجديد: برمجة البورت والأمان ديناميكياً ===
+        selected_port = data.get('port', 443) # قراءة البورت من اختيارات البوت
+        
+        if selected_port == 443:
+            security_type = "tls"
+            sni_param = "&sni=wathfor.alwaysdata.net"
+        else:
+            # إذا كان البورت 80 أو أي بورت آخر، نلغي الـ TLS
+            security_type = "none"
+            sni_param = "" 
+
+        # توليد رابط VLESS جاهز ومطابق للاختيارات
+        vless_link = f"vless://{data['uuid']}@wathfor.alwaysdata.net:{selected_port}?type=ws&security={security_type}&path=/ashor{sni_param}#{data['name']}"
+        
+        quota_display = "بلا حدود ♾️" if data['quota_bytes'] == 0 else f"{data['quota_bytes'] / (1024**3):.2f} GB"
         
         summary = f"""
 ✅ **تم إنشاء الكود وتفعيله بالسيرفر بنجاح!**
 
 👤 **الاسم:** `{data['name']}`
+🌐 **البروتوكول:** `{data['protocol'].upper()}`
+🚪 **البورت:** `{selected_port}`
+🛤️ **المسار:** `{data['path']}`
+🔑 **المعرف:** `{data['uuid']}`
+👥 **الأجهزة المتصلة:** `{data['ips']}`
 ⏳ **المدة:** `{data['duration']} أيام`
+📊 **السعة:** `{quota_display}`
 
 🔗 **انسخ الكود أدناه والصقه في تطبيق (DarkTunnel أو v2rayNG):**
 `{vless_link}`
