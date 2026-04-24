@@ -8,36 +8,71 @@
         "clients": [],
         "decryption": "none",
         "fallbacks": [
-          { "path": "/Telegram-@338888-vless", "dest": 8101 },
-          { "path": "/Telegram-@338888-vmess", "dest": 8102 },
-          { "path": "/Telegram-@338888-trojan", "dest": 8103 }
+          {
+            "path": "/Telegram-@338888-vless",
+            "dest": 8101
+          },
+          {
+            "path": "/Telegram-@338888-vmess",
+            "dest": 8102
+          },
+          {
+            "path": "/Telegram-@338888-trojan",
+            "dest": 8103
+          }
         ]
       },
-      "streamSettings": { "network": "tcp" }
+      "streamSettings": {
+        "network": "tcp"
+      }
     },
     {
       "port": 8101,
       "listen": "127.0.0.1",
       "protocol": "vless",
-      "settings": { "clients": [], "decryption": "none" },
-      "streamSettings": { "network": "ws", "wsSettings": { "path": "/Telegram-@338888-vless" } }
+      "settings": {
+        "clients": [],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "ws",
+        "wsSettings": {
+          "path": "/Telegram-@338888-vless"
+        }
+      }
     },
     {
       "port": 8102,
       "listen": "127.0.0.1",
       "protocol": "vmess",
-      "settings": { "clients": [] },
-      "streamSettings": { "network": "ws", "wsSettings": { "path": "/Telegram-@338888-vmess" } }
+      "settings": {
+        "clients": []
+      },
+      "streamSettings": {
+        "network": "ws",
+        "wsSettings": {
+          "path": "/Telegram-@338888-vmess"
+        }
+      }
     },
     {
       "port": 8103,
       "listen": "127.0.0.1",
       "protocol": "trojan",
-      "settings": { "clients": [] },
-      "streamSettings": { "network": "ws", "wsSettings": { "path": "/Telegram-@338888-trojan" } }
+      "settings": {
+        "clients": []
+      },
+      "streamSettings": {
+        "network": "ws",
+        "wsSettings": {
+          "path": "/Telegram-@338888-trojan"
+        }
+      }
     }
   ],
   "outbounds": [
-    { "protocol": "freedom" }
+    {
+      "protocol": "freedom"
+    }
   ]
 }
