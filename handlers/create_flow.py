@@ -76,8 +76,8 @@ def register_create_handlers(bot):
     def process_ws(call):
         chat_id = call.message.chat.id
         creation_data[chat_id]['network'] = 'ws'
-        # تم تحديد المسار إجبارياً ليتطابق مع السيرفر
-        creation_data[chat_id]['path'] = '/ashor'
+        # تم تحديد المسار إجبارياً ليتطابق مع طلبك
+        creation_data[chat_id]['path'] = '/Telegram-@338888'
         ask_uuid(chat_id, bot, call.message.message_id)
 
     # 5. اختيار المعرف (UUID)
@@ -245,7 +245,7 @@ def register_create_handlers(bot):
         protocol = data.get('protocol', 'vless').lower()
         selected_port = data.get('port', 443)
         host_domain = "wathfor.alwaysdata.net"
-        fixed_path = "/ashor" # المسار الثابت للسيرفر
+        fixed_path = "/Telegram-@338888" # المسار الثابت الجديد
         
         # إعدادات الأمان حسب البورت
         if selected_port == 443:
