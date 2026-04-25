@@ -95,7 +95,7 @@
       }
     },
     {
-      "listen": "/home/wathfor/xray_core/api.sock",
+      "listen": "/tmp/api.sock",
       "protocol": "dokodemo-door",
       "settings": {
         "address": "127.0.0.1"
