@@ -4,6 +4,7 @@ import random
 import string
 import json
 import base64
+import time # 👈 ضروري جداً لحساب وقت الانتهاء بالثانية
 
 # قاموس لحفظ بيانات الإنشاء المؤقتة قبل إرسالها للسيرفر
 creation_data = {}
@@ -144,19 +145,18 @@ def register_create_handlers(bot):
             msg = bot.send_message(chat_id, "❌ خطأ! أرسل رقماً صحيحاً للأجهزة:")
             bot.register_next_step_handler(msg, lambda m: save_ips_and_ask_duration(m, bot))
 
-    # 7. تحديد المدة (Duration)
+    # 7. تحديد المدة المتقدم (دعم الدقائق، الساعات، الأيام)
     def ask_duration(chat_id, bot, message_id=None):
         markup = InlineKeyboardMarkup(row_width=3)
         markup.add(
-            InlineKeyboardButton("يوم", callback_data="dur_1"),
-            InlineKeyboardButton("أسبوع", callback_data="dur_7"),
-            InlineKeyboardButton("15 يوم", callback_data="dur_15"),
-            InlineKeyboardButton("شهر", callback_data="dur_30"),
-            InlineKeyboardButton("شهرين", callback_data="dur_60"),
-            InlineKeyboardButton("3 أشهر", callback_data="dur_90"),
+            InlineKeyboardButton("1 دقيقة ⏱️", callback_data="dur_1m"),
+            InlineKeyboardButton("1 ساعة ⏳", callback_data="dur_1h"),
+            InlineKeyboardButton("يوم", callback_data="dur_1d"),
+            InlineKeyboardButton("شهر", callback_data="dur_30d"),
+            InlineKeyboardButton("سنة", callback_data="dur_365d"),
             InlineKeyboardButton("مدة يدوية ✍️", callback_data="dur_manual")
         )
-        text = "⏳ حدد مدة الكود (بالأيام):"
+        text = "⏳ حدد مدة الكود:"
         if message_id:
             bot.edit_message_text(text, chat_id, message_id, reply_markup=markup)
         else:
@@ -168,20 +168,23 @@ def register_create_handlers(bot):
         choice = call.data.split('_')[1]
         
         if choice == "manual":
-            msg = bot.send_message(chat_id, "✍️ أرسل المدة بالأيام (أو اكتب صيغة مثل 45):")
+            msg = bot.send_message(chat_id, "✍️ أرسل المدة (مثال: 5m لدقائق، 2h لساعات، 10d لأيام، 1y لسنة):")
             bot.register_next_step_handler(msg, lambda m: save_duration_and_ask_quota(m, bot))
         else:
-            creation_data[chat_id]['duration'] = int(choice)
+            creation_data[chat_id]['duration_str'] = choice
             ask_quota(chat_id, bot, call.message.message_id)
 
     def save_duration_and_ask_quota(message, bot):
         chat_id = message.chat.id
-        try:
-            creation_data[chat_id]['duration'] = int(message.text)
-            ask_quota(chat_id, bot)
-        except ValueError:
-            msg = bot.send_message(chat_id, "❌ خطأ! أرسل المدة بالأيام كرقم صحيح:")
+        text = message.text.lower().strip()
+        # تحقق من صحة الإدخال
+        if not (text.endswith('m') or text.endswith('h') or text.endswith('d') or text.endswith('y') or text.isdigit()):
+            msg = bot.send_message(chat_id, "❌ خطأ! أرسل صيغة صحيحة (مثال 10m, 2h, 5d):")
             bot.register_next_step_handler(msg, lambda m: save_duration_and_ask_quota(m, bot))
+            return
+            
+        creation_data[chat_id]['duration_str'] = text
+        ask_quota(chat_id, bot)
 
     # 8. تحديد السعة (Quota)
     def ask_quota(chat_id, bot, message_id=None):
@@ -238,6 +241,17 @@ def register_create_handlers(bot):
         fixed_path = f"/Telegram-@338888-{protocol}"
         data['path'] = fixed_path
 
+        # === حساب وقت الانتهاء بالثانية (Timestamp) ===
+        dur_str = data['duration_str']
+        if dur_str.endswith('m'): sec = int(dur_str[:-1]) * 60
+        elif dur_str.endswith('h'): sec = int(dur_str[:-1]) * 3600
+        elif dur_str.endswith('d'): sec = int(dur_str[:-1]) * 86400
+        elif dur_str.endswith('y'): sec = int(dur_str[:-1]) * 86400 * 365
+        else: sec = int(dur_str) * 86400 # افتراضي أيام في حال إدخال رقم فقط
+        
+        # الوقت الحالي + الثواني المطلوبة
+        expiry_time = time.time() + sec
+
         # إضافة المشترك للسيرفر الفعلي وإرسال نوع البروتوكول للفرز
         try:
             from xray_core.panel_api import PanelAPI
@@ -246,10 +260,11 @@ def register_create_handlers(bot):
         except Exception as e:
             print(f"Error connecting to local API: {e}")
 
-        # === حفظ المشترك وسعته المحددة (Quota) في قاعدة البيانات ===
+        # === حفظ المشترك وسعته ووقت انتهائه في قاعدة البيانات ===
         try:
             from database import save_user
-            save_user(data['name'], data['uuid'], data['quota_bytes'])
+            # نرسل الـ expiry_time للداتا بيس
+            save_user(data['name'], data['uuid'], data['quota_bytes'], expiry_time)
         except Exception as e:
             print(f"Error saving to DB: {e}")
 
@@ -307,7 +322,7 @@ def register_create_handlers(bot):
 🛤️ **المسار:** `{fixed_path}`
 🔑 **المعرف:** `{data['uuid']}`
 👥 **الأجهزة المتصلة:** `{data['ips']}`
-⏳ **المدة:** `{data['duration']} أيام`
+⏳ **المدة:** `{data['duration_str']}`
 📊 **السعة:** `{quota_display}`
 
 🔗 **انسخ الكود أدناه والصقه في تطبيق (DarkTunnel أو v2rayNG):**
