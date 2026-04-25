@@ -95,8 +95,7 @@
       }
     },
     {
-      "listen": "127.0.0.1",
-      "port": 10085,
+      "listen": "/home/wathfor/xray_core/api.sock",
       "protocol": "dokodemo-door",
       "settings": {
         "address": "127.0.0.1"
