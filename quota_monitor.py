@@ -5,27 +5,23 @@ import os
 from database import load_db, update_db
 from xray_core.panel_api import PanelAPI
 
-# مسارات كاملة لتجنب مشاكل الاستضافة
+# مسارات كاملة - تأكد من صحتها في سيرفرك
 SPEED_FILE = '/home/wathfor/v2ray_manager/live_speed.json'
 ERROR_LOG = '/home/wathfor/v2ray_manager/monitor_error.log'
 XRAY_BIN = '/home/wathfor/xray_core/xray'
 
-# 🔥 التحديث السحري (Unix Domain Socket) 🔥
-# نستخدم مسار الملف الفيزيائي بدلاً من IP والبورت لضمان تخطي حظر الاستضافة
+# استخدام Unix Socket لكسر جدار حماية Alwaysdata
 API_SERVER = 'unix:///home/wathfor/xray_core/api.sock'
 
 def start_quota_monitor():
     api = PanelAPI()
-    print(f"⏱️ Monitor Started via UNIX SOCKET on {API_SERVER}...")
+    print(f"🕵️‍♂️ نظام المراقبة الاحترافي يعمل الآن عبر: {API_SERVER}")
     
     while True:
-        time.sleep(3) 
+        time.sleep(4) # مهلة بسيطة لضمان استقرار القراءة
         
-        # ==========================================
-        # 1. نظام العيون: جلب الإحصائيات المباشرة
-        # ==========================================
         try:
-            # تنفيذ أمر جلب الإحصائيات عبر ملف السوكت
+            # 1. جلب البيانات الخام من المحرك
             cmd = f"{XRAY_BIN} api statsquery -server={API_SERVER} -reset=true"
             result = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT, timeout=5).decode('utf-8')
             
@@ -39,63 +35,70 @@ def start_quota_monitor():
                 db = load_db()
                 db_changed = False
                 
+                # طباعة البيانات للمراقبة (ستراها في سجلات الخدمة بالمنصة)
+                if stat_list:
+                    print(f"📊 تم رصد {len(stat_list)} سجل إحصائيات...")
+
                 for stat in stat_list:
                     name = stat.get('name', '')
                     value = int(stat.get('value', 0))
-                    if value == 0: continue
                     
+                    if value <= 0: continue
+                    
+                    # حساب السرعة العامة للسيرفر
                     if 'downlink' in name: current_down += value
                     if 'uplink' in name: current_up += value
-                        
+                    
+                    # الفرز الذكي للمستخدمين
                     if 'user>>>' in name and '>>>traffic>>>' in name:
-                        email = name.split('>>>')[1]
-                        if email in db:
-                            # تحديث استهلاك المستخدم بالبايتات الجديدة
-                            db[email]['used_bytes'] = db[email].get('used_bytes', 0) + value
-                            db_changed = True
+                        # استخراج الإيميل بدقة
+                        parts = name.split('>>>')
+                        if len(parts) >= 2:
+                            email = parts[1]
+                            if email in db:
+                                db[email]['used_bytes'] = db[email].get('used_bytes', 0) + value
+                                db_changed = True
+                                print(f"✅ تم تسجيل {value} بايت للمستخدم: {email}")
+                            else:
+                                # هذا السطر سينقذك إذا كان هناك اختلاف في الأسماء
+                                print(f"⚠️ تنبيه: رصد استهلاك لاسم ({email}) لكنه غير موجود بالداتا بيس!")
                             
                 if db_changed:
                     update_db(db)
-                    
-            # حفظ السرعة المباشرة للسيرفر ليتم عرضها في البوت
+            
+            # تحديث ملف السرعة
             with open(SPEED_FILE, 'w') as f:
-                json.dump({'down_bps': current_down // 3, 'up_bps': current_up // 3}, f)
+                json.dump({'down_bps': current_down // 4, 'up_bps': current_up // 4}, f)
                 
-        except subprocess.CalledProcessError as e:
-            # تسجيل الخطأ إذا فشل الاتصال بالسوكت
-            with open(ERROR_LOG, 'a') as f:
-                f.write(f"\n[Stats Error] {e.output.decode('utf-8')}")
         except Exception as e:
+            with open(ERROR_LOG, 'a') as f:
+                f.write(f"\n[{time.ctime()}] Monitor Logic Error: {str(e)}")
             pass
 
-        # ==========================================
-        # 2. العقل المدبر القاسي: فحص الوقت والحدود والطرد
-        # ==========================================
+        # 2. نظام الطرد الصارم (وقت + جيجات)
         try:
             db = load_db()
             db_changed = False
-            current_time = time.time()
+            now = time.time()
             
-            for email, user_data in list(db.items()):
-                if user_data.get('is_active', True):
-                    limit = user_data.get('limit_bytes', 0)
-                    used = user_data.get('used_bytes', 0)
-                    expiry = user_data.get('expiry_time', 0)
+            for email, data in list(db.items()):
+                if data.get('is_active', True):
+                    limit = data.get('limit_bytes', 0)
+                    used = data.get('used_bytes', 0)
+                    expiry = data.get('expiry_time', 0)
                     
-                    expired_by_quota = (limit > 0 and used >= limit)
-                    expired_by_time = (expiry > 0 and current_time >= expiry)
+                    # فحص الصلاحية
+                    is_quota_done = (limit > 0 and used >= limit)
+                    is_time_done = (expiry > 0 and now >= expiry)
                     
-                    if expired_by_quota or expired_by_time:
-                        reason = "الوقت ⏱️" if expired_by_time else "الجيجات 📊"
-                        print(f"🚫 تم القطع التلقائي عن: {email} بسبب انتهاء {reason}")
-                        
-                        # تعطيل الحساب في الداتابيس وفي سيرفر Xray
+                    if is_quota_done or is_time_done:
+                        reason = "الوقت ⏱️" if is_time_done else "البيانات 📊"
+                        print(f"🚫 طرد فوري: {email} | السبب: انتهاء {reason}")
                         db[email]['is_active'] = False
                         api.change_client_status(email, enable=False)
                         db_changed = True
-                        
+            
             if db_changed:
                 update_db(db)
-                
-        except Exception as e:
+        except:
             pass
