@@ -9,56 +9,60 @@ from xray_core.panel_api import PanelAPI
 SPEED_FILE = '/home/wathfor/v2ray_manager/live_speed.json'
 ERROR_LOG = '/home/wathfor/v2ray_manager/monitor_error.log'
 XRAY_BIN = '/home/wathfor/xray_core/xray'
+API_SERVER = '127.0.0.1:10085'
 
 def start_quota_monitor():
     api = PanelAPI()
-    print("📊 Quota Monitor Started (Real-Time Speed Mode)...")
+    print(f"⏱️ Monitor Started (Time & Quota) on {API_SERVER}...")
     
     while True:
         time.sleep(3) 
         try:
-            cmd = f"{XRAY_BIN} api statsquery -server=127.0.0.1:10085 -reset=true"
-            # تسجيل المخرجات لكشف الأخطاء وزيادة وقت الانتظار لـ 5 ثواني
+            # 1. جلب الإحصائيات المباشرة
+            cmd = f"{XRAY_BIN} api statsquery -server={API_SERVER} -reset=true"
             result = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT, timeout=5).decode('utf-8')
-            
-            if not result.strip():
-                with open(SPEED_FILE, 'w') as f:
-                    json.dump({'down_bps': 0, 'up_bps': 0}, f)
-                continue
-
-            stats = json.loads(result)
-            stat_list = stats.get('stat', [])
             
             db = load_db()
             db_changed = False
             current_down = 0
             current_up = 0
             
-            for stat in stat_list:
-                name = stat.get('name', '')
-                value = int(stat.get('value', 0))
-                if value == 0: continue
-                
-                # حساب السرعة المباشرة للسيرفر
-                if 'downlink' in name: current_down += value
-                if 'uplink' in name: current_up += value
+            # 2. تحديث استهلاك البيانات وحساب السرعة
+            if result.strip():
+                stats = json.loads(result)
+                stat_list = stats.get('stat', [])
+                for stat in stat_list:
+                    name = stat.get('name', '')
+                    value = int(stat.get('value', 0))
+                    if value == 0: continue
                     
-                # حساب استهلاك الجيجات للمشتركين والقطع الفوري
-                if 'user>>>' in name and '>>>traffic>>>' in name:
-                    email = name.split('>>>')[1]
-                    if email in db:
-                        db[email]['used_bytes'] = db[email].get('used_bytes', 0) + value
+                    if 'downlink' in name: current_down += value
+                    if 'uplink' in name: current_up += value
+                        
+                    if 'user>>>' in name and '>>>traffic>>>' in name:
+                        email = name.split('>>>')[1]
+                        if email in db:
+                            db[email]['used_bytes'] = db[email].get('used_bytes', 0) + value
+                            db_changed = True
+
+            # 3. 🚨 العقل المدبر (فحص الوقت والجيجات لجميع المشتركين)
+            current_time = time.time()
+            for email, user_data in list(db.items()):
+                if user_data.get('is_active', True):
+                    limit = user_data.get('limit_bytes', 0)
+                    used = user_data.get('used_bytes', 0)
+                    expiry = user_data.get('expiry_time', 0)
+                    
+                    expired_by_quota = (limit > 0 and used >= limit)
+                    expired_by_time = (expiry > 0 and current_time >= expiry)
+                    
+                    if expired_by_quota or expired_by_time:
+                        reason = "الوقت ⏱️" if expired_by_time else "الجيجات 📊"
+                        print(f"🚫 تم القطع عن: {email} بسبب انتهاء {reason}")
+                        db[email]['is_active'] = False
+                        api.change_client_status(email, enable=False)
                         db_changed = True
                         
-                        limit = db[email].get('limit_bytes', 0)
-                        is_active = db[email].get('is_active', True)
-                        
-                        # القطع الفوري
-                        if limit > 0 and db[email]['used_bytes'] >= limit and is_active:
-                            print(f"🚫 تم القطع الفوري عن: {email}")
-                            db[email]['is_active'] = False
-                            api.change_client_status(email, enable=False)
-                            
             if db_changed:
                 update_db(db)
                 
