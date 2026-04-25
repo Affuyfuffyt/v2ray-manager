@@ -6,7 +6,10 @@
   "api": {
     "tag": "api",
     "services": [
-      "StatsService"
+      "StatsService",
+      "HandlerService",
+      "LoggerService",
+      "ReflectionService"
     ]
   },
   "policy": {
