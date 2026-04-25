@@ -3,9 +3,6 @@ import os
 
 DB_PATH = os.path.expanduser('~/v2ray_manager/users_db.json')
 
-# ==========================================
-# 1. دوال نظام الطرد التكتيكي (Anti-Share)
-# ==========================================
 def load_db():
     if not os.path.exists(DB_PATH):
         return {}
@@ -15,15 +12,22 @@ def load_db():
     except:
         return {}
 
-def save_user(email, uuid, limit):
-    data = load_db()
-    # حفظ بيانات المشترك مع عدد أجهزته وحالة الحظر
-    data[email] = {'uuid': uuid, 'limit': limit, 'banned_until': 0}
-    update_db(data)
-
 def update_db(data):
     with open(DB_PATH, 'w') as f:
         json.dump(data, f, indent=2)
+
+def save_user(email, uuid, limit_bytes):
+    data = load_db()
+    # limit_bytes = 0 يعني بلا حدود
+    # used_bytes = العداد اللي راح يحسب شكد صرف المشترك
+    # is_active = حالة الكود (شغال لو خلصت باقته وانحظر)
+    data[email] = {
+        'uuid': uuid, 
+        'limit_bytes': limit_bytes, 
+        'used_bytes': 0, 
+        'is_active': True
+    }
+    update_db(data)
 
 # ==========================================
 # 2. كائن (db) لحل مشكلة الإيرور في البوت
