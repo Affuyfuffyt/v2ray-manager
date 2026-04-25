@@ -2,8 +2,8 @@ import telebot
 import threading
 import config
 from xray_core.panel_api import PanelAPI
-from handlers import admin_start, create_flow, manage_flow
-from quota_monitor import start_quota_monitor # 👈 استدعاء عداد الجيجات
+from handlers import admin_start, create_flow, manage_flow, speed_test # 👈 التحديث: استدعاء ملف التيست
+from quota_monitor import start_quota_monitor
 
 # 1. تهيئة البوت والـ API
 bot = telebot.TeleBot(config.BOT_TOKEN)
@@ -20,6 +20,7 @@ bot.add_custom_filter(IsAdmin())
 # 3. تسجيل معالجات الأزرار والرسائل (Handlers)
 create_flow.register_create_handlers(bot)
 manage_flow.register_manage_handlers(bot)
+speed_test.register_speed_handlers(bot) # 👈 التحديث: تشغيل زر التيست المباشر
 
 @bot.message_handler(commands=['start'], is_admin=True)
 def start(message):
@@ -31,10 +32,10 @@ def start(message):
 if __name__ == "__main__":
     print(f"🚀 البوت يعمل الآن للأدمن ID: {config.ADMIN_ID}")
     
-    # 👈 تشغيل مراقب الاستهلاك (الكوتا) في خيط منفصل
+    # تشغيل مراقب الاستهلاك والسرعة في خيط منفصل
     monitor_thread = threading.Thread(target=start_quota_monitor, daemon=True)
     monitor_thread.start()
-    print("📊 نظام حساب الجيجابايت (الكوتا) يعمل الآن بالخلفية...")
+    print("📊 نظام حساب الجيجابايت والسرعة المباشرة يعمل الآن بالخلفية...")
     
     try:
         bot.infinity_polling()
