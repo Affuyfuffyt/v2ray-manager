@@ -5,24 +5,23 @@ import os
 from database import load_db, update_db
 from xray_core.panel_api import PanelAPI
 
-# ملف صغير لحفظ السرعة الحالية للسيرفر (لكي يقرأها زر التيست)
-SPEED_FILE = os.path.expanduser('~/v2ray_manager/live_speed.json')
+# مسارات كاملة لتجنب مشاكل الاستضافة
+SPEED_FILE = '/home/wathfor/v2ray_manager/live_speed.json'
+ERROR_LOG = '/home/wathfor/v2ray_manager/monitor_error.log'
+XRAY_BIN = '/home/wathfor/xray_core/xray'
 
 def start_quota_monitor():
     api = PanelAPI()
     print("📊 Quota Monitor Started (Real-Time Speed Mode)...")
-    XRAY_BIN = os.path.expanduser('~/xray_core/xray')
     
     while True:
-        # الفحص كل 3 ثواني حتى يعطيك السرعة الحالية بدقة وبدون ما يثقل السيرفر
         time.sleep(3) 
         try:
             cmd = f"{XRAY_BIN} api statsquery -server=127.0.0.1:10085 -reset=true"
-            # وضعنا timeout حتى لا يعلّق الكود
-            result = subprocess.check_output(cmd, shell=True, stderr=subprocess.DEVNULL, timeout=2).decode('utf-8')
+            # تسجيل المخرجات لكشف الأخطاء وزيادة وقت الانتظار لـ 5 ثواني
+            result = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT, timeout=5).decode('utf-8')
             
             if not result.strip():
-                # إذا لا يوجد استهلاك، نُصفر عداد السرعة
                 with open(SPEED_FILE, 'w') as f:
                     json.dump({'down_bps': 0, 'up_bps': 0}, f)
                 continue
@@ -54,7 +53,7 @@ def start_quota_monitor():
                         limit = db[email].get('limit_bytes', 0)
                         is_active = db[email].get('is_active', True)
                         
-                        # القطع الفوري (بالملم)
+                        # القطع الفوري
                         if limit > 0 and db[email]['used_bytes'] >= limit and is_active:
                             print(f"🚫 تم القطع الفوري عن: {email}")
                             db[email]['is_active'] = False
@@ -63,9 +62,15 @@ def start_quota_monitor():
             if db_changed:
                 update_db(db)
                 
-            # حفظ السرعة الحالية (قسمنا على 3 لأن الفحص كل 3 ثواني، لنحصل على بايت/ثانية)
+            # حفظ السرعة الحالية
             with open(SPEED_FILE, 'w') as f:
                 json.dump({'down_bps': current_down // 3, 'up_bps': current_up // 3}, f)
                 
         except Exception as e:
+            # إذا صار إيرور راح ينحفظ بملف حتى نعرف الخلل وين بالضبط
+            error_msg = str(e)
+            if hasattr(e, 'output'):
+                error_msg += f"\nOutput: {e.output.decode('utf-8')}"
+            with open(ERROR_LOG, 'w') as f:
+                f.write(error_msg)
             pass
