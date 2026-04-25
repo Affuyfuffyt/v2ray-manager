@@ -104,6 +104,10 @@
   "outbounds": [
     {
       "protocol": "freedom"
+    },
+    {
+      "protocol": "blackhole",
+      "tag": "api"
     }
   ],
   "routing": {
