@@ -10,18 +10,18 @@ SPEED_FILE = '/home/wathfor/v2ray_manager/live_speed.json'
 ERROR_LOG = '/home/wathfor/v2ray_manager/monitor_error.log'
 XRAY_BIN = '/home/wathfor/xray_core/xray'
 
-# 🔥 التحديث النهائي: استخدام مجلد الـ /tmp لتجاوز قيود الاستضافة 🔥
-API_SERVER = 'unix:///tmp/api.sock'
+# 🔥 التحديث النهائي: استخدام المنفذ المخفي (Ghost Port) لتجاوز قيود الاستضافة 🔥
+API_SERVER = '127.0.0.1:10086'
 
 def start_quota_monitor():
     api = PanelAPI()
-    print(f"🕵️‍♂️ نظام المراقبة الاحترافي يعمل الآن عبر الجسر السري: {API_SERVER}")
+    print(f"🕵️‍♂️ نظام المراقبة الاحترافي يعمل الآن عبر المنفذ المخفي: {API_SERVER}")
     
     while True:
         time.sleep(4) # مهلة بسيطة لضمان استقرار القراءة
         
         try:
-            # 1. جلب البيانات الخام من المحرك عبر السوكت الجديد
+            # 1. جلب البيانات الخام من المحرك عبر البورت الجديد
             cmd = f"{XRAY_BIN} api statsquery -server={API_SERVER} -reset=true"
             result = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT, timeout=5).decode('utf-8')
             
@@ -37,7 +37,7 @@ def start_quota_monitor():
                 
                 # طباعة البيانات للمراقبة في سجلات Alwaysdata
                 if stat_list:
-                    print(f"📊 تم رصد {len(stat_list)} سجل إحصائيات من السوكت...")
+                    print(f"📊 تم رصد {len(stat_list)} سجل إحصائيات...")
 
                 for stat in stat_list:
                     name = stat.get('name', '')
