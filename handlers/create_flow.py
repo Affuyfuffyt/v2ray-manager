@@ -246,10 +246,10 @@ def register_create_handlers(bot):
         except Exception as e:
             print(f"Error connecting to local API: {e}")
 
-        # === حفظ المشترك وعدد الأجهزة المسموحة في قاعدة البيانات للحماية ===
+        # === حفظ المشترك وسعته المحددة (Quota) في قاعدة البيانات ===
         try:
             from database import save_user
-            save_user(data['name'], data['uuid'], data['ips'])
+            save_user(data['name'], data['uuid'], data['quota_bytes'])
         except Exception as e:
             print(f"Error saving to DB: {e}")
 
