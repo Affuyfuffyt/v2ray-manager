@@ -10,18 +10,18 @@ SPEED_FILE = '/home/wathfor/v2ray_manager/live_speed.json'
 ERROR_LOG = '/home/wathfor/v2ray_manager/monitor_error.log'
 XRAY_BIN = '/home/wathfor/xray_core/xray'
 
-# استخدام Unix Socket لكسر جدار حماية Alwaysdata
-API_SERVER = 'unix:///home/wathfor/xray_core/api.sock'
+# 🔥 التحديث النهائي: استخدام مجلد الـ /tmp لتجاوز قيود الاستضافة 🔥
+API_SERVER = 'unix:///tmp/api.sock'
 
 def start_quota_monitor():
     api = PanelAPI()
-    print(f"🕵️‍♂️ نظام المراقبة الاحترافي يعمل الآن عبر: {API_SERVER}")
+    print(f"🕵️‍♂️ نظام المراقبة الاحترافي يعمل الآن عبر الجسر السري: {API_SERVER}")
     
     while True:
         time.sleep(4) # مهلة بسيطة لضمان استقرار القراءة
         
         try:
-            # 1. جلب البيانات الخام من المحرك
+            # 1. جلب البيانات الخام من المحرك عبر السوكت الجديد
             cmd = f"{XRAY_BIN} api statsquery -server={API_SERVER} -reset=true"
             result = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT, timeout=5).decode('utf-8')
             
@@ -35,9 +35,9 @@ def start_quota_monitor():
                 db = load_db()
                 db_changed = False
                 
-                # طباعة البيانات للمراقبة (ستراها في سجلات الخدمة بالمنصة)
+                # طباعة البيانات للمراقبة في سجلات Alwaysdata
                 if stat_list:
-                    print(f"📊 تم رصد {len(stat_list)} سجل إحصائيات...")
+                    print(f"📊 تم رصد {len(stat_list)} سجل إحصائيات من السوكت...")
 
                 for stat in stat_list:
                     name = stat.get('name', '')
@@ -51,7 +51,6 @@ def start_quota_monitor():
                     
                     # الفرز الذكي للمستخدمين
                     if 'user>>>' in name and '>>>traffic>>>' in name:
-                        # استخراج الإيميل بدقة
                         parts = name.split('>>>')
                         if len(parts) >= 2:
                             email = parts[1]
@@ -60,13 +59,12 @@ def start_quota_monitor():
                                 db_changed = True
                                 print(f"✅ تم تسجيل {value} بايت للمستخدم: {email}")
                             else:
-                                # هذا السطر سينقذك إذا كان هناك اختلاف في الأسماء
-                                print(f"⚠️ تنبيه: رصد استهلاك لاسم ({email}) لكنه غير موجود بالداتا بيس!")
+                                print(f"⚠️ تنبيه: رصد استهلاك للاسم ({email}) غير موجود بالداتا بيس!")
                             
                 if db_changed:
                     update_db(db)
             
-            # تحديث ملف السرعة
+            # تحديث ملف السرعة لزر الفحص المباشر
             with open(SPEED_FILE, 'w') as f:
                 json.dump({'down_bps': current_down // 4, 'up_bps': current_up // 4}, f)
                 
@@ -87,7 +85,6 @@ def start_quota_monitor():
                     used = data.get('used_bytes', 0)
                     expiry = data.get('expiry_time', 0)
                     
-                    # فحص الصلاحية
                     is_quota_done = (limit > 0 and used >= limit)
                     is_time_done = (expiry > 0 and now >= expiry)
                     
