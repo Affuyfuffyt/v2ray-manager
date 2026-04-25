@@ -1,13 +1,17 @@
 import json
 import os
+import requests
+from dotenv import load_dotenv
 import time
 
 CONFIG_PATH = '/home/wathfor/xray_core/config.json'
 
 class PanelAPI:
     def __init__(self):
-        # تم الاستغناء عن API المنصة لأننا نستخدم الحارس (Watchdog) في ملف run.py
-        pass
+        # تحميل المفاتيح من ملف .env المخفي للاتصال الرسمي بالمنصة
+        load_dotenv()
+        self.api_key = os.getenv('AD_API_KEY')
+        self.site_id = os.getenv('AD_SITE_ID')
 
     def create_client(self, email, uuid, protocol="vless"):
         try:
@@ -42,9 +46,24 @@ class PanelAPI:
             return False
 
     def restart_xray(self):
-        # 🔥 نقتل المحرك فقط، وحارس البوت (Watchdog) راح يكتشف إنه مات ويرجع يشغله بثانية! 🔥
+        # 1. الضربة القاضية: نقتل العملية فوراً لقطع النت عن المنتهية صلاحيتهم
         os.system("pkill -9 xray")
         time.sleep(0.5)
+        
+        # 2. التشغيل القانوني: نطلب من منصة Alwaysdata تشغيل الموقع رسمياً
+        if self.api_key and self.site_id:
+            try:
+                url = f"https://api.alwaysdata.com/v1/site/{self.site_id}/restart/"
+                response = requests.post(url, auth=(self.api_key, ''))
+                
+                if response.status_code == 204:
+                    print("✅ Successfully restarted site via API")
+                    return True
+                else:
+                    print(f"⚠️ API Restart failed with status: {response.status_code}")
+            except Exception as e:
+                print(f"API Restart Error: {e}")
+        
         return True
 
     def get_client_traffic(self, email):
@@ -61,7 +80,7 @@ class PanelAPI:
                     clients = config['inbounds'][i]['settings']['clients']
                     if not enable:
                         original_len = len(clients)
-                        # حذف المشترك لقطع النت
+                        # حذف المشترك
                         config['inbounds'][i]['settings']['clients'] = [c for c in clients if c.get('email') != email]
                         if len(config['inbounds'][i]['settings']['clients']) != original_len:
                             changed = True
