@@ -29,16 +29,26 @@ speed_test.register_speed_handlers(bot)
 def start(message):
     admin_start.show_main_menu(bot, message.chat.id)
 
-# 4. 🔥 الدالة السحرية لتشغيل Xray وجعله جزء من البوت 🔥
-def start_xray_engine():
-    print("🚀 Starting Xray Engine internally...")
-    os.system("pkill -9 xray") # تنظيف أي نسخة معلقة
-    time.sleep(1)
-    # تشغيل المحرك كـ "ابن" للبوت حتى لا تقتله الاستضافة
+# 4. 🔥 الكلب البوليسي (Watchdog): يراقب Xray وإذا طفى يشغله فوراً كجزء من البوت 🔥
+def xray_watchdog():
     xray_bin = "/home/wathfor/xray_core/xray"
     config_path = "/home/wathfor/xray_core/config.json"
-    subprocess.Popen([xray_bin, 'run', '-c', config_path])
-    print("✅ Xray Engine is UP and running on port 10085!")
+    
+    # تنظيف مبدئي لأي نسخة معلقة
+    os.system("pkill -9 xray")
+    time.sleep(1)
+    
+    while True:
+        try:
+            # يفحص هل Xray يعمل؟ (pgrep يرجع خطأ إذا ما لكاه)
+            subprocess.check_output(["pgrep", "-x", "xray"])
+        except subprocess.CalledProcessError:
+            # إذا لكاه طافي (مثلاً البوت قتله حتى يطرد مشترك)، يشغله فوراً
+            print("⚠️ Xray Engine is DOWN! Restarting it internally...")
+            subprocess.Popen([xray_bin, 'run', '-c', config_path])
+            print("✅ Xray Engine is UP and running on port 10085!")
+        
+        time.sleep(3) # يفحص حالة المحرك كل 3 ثواني
 
 # ---------------------------------------------------------
 # 5. تشغيل النظام بالكامل
@@ -46,13 +56,14 @@ def start_xray_engine():
 if __name__ == "__main__":
     print(f"🚀 البوت يعمل الآن للأدمن ID: {config.ADMIN_ID}")
     
-    # أول خطوة: إطلاق محرك الإنترنت الداخلي حتى لا يتم حظره
-    start_xray_engine()
+    # أول خطوة: تشغيل حارس المحرك (يضمن بقاء الإنترنت شغال 24/7 ومقاوم للحظر)
+    watchdog_thread = threading.Thread(target=xray_watchdog, daemon=True)
+    watchdog_thread.start()
     
     # ثاني خطوة: تشغيل مراقب الاستهلاك والسرعة بالخلفية
     monitor_thread = threading.Thread(target=start_quota_monitor, daemon=True)
     monitor_thread.start()
-    print("📊 نظام حساب الجيجابايت والسرعة المباشرة يعمل الآن...")
+    print("📊 نظام الحارس الشخصي ومراقب الجيجابايت يعمل الآن...")
     
     try:
         bot.infinity_polling()
