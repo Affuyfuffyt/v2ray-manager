@@ -3,6 +3,7 @@ import os
 
 DB_PATH = os.path.expanduser('~/v2ray_manager/users_db.json')
 
+# --- دوال التعامل مع الملف ---
 def load_db():
     if not os.path.exists(DB_PATH):
         return {}
@@ -16,21 +17,35 @@ def update_db(data):
     with open(DB_PATH, 'w') as f:
         json.dump(data, f, indent=2)
 
-def save_user(email, uuid, limit_bytes):
+# --- دالة الحفظ مع دعم وقت الانتهاء ---
+def save_user(email, uuid, limit_bytes, expiry_time):
     data = load_db()
-    # limit_bytes = 0 يعني بلا حدود
-    # used_bytes = العداد اللي راح يحسب شكد صرف المشترك
-    # is_active = حالة الكود (شغال لو خلصت باقته وانحظر)
+    # يتم حفظ البيانات كـ كائن يحتوي على كل التفاصيل
     data[email] = {
         'uuid': uuid, 
         'limit_bytes': limit_bytes, 
         'used_bytes': 0, 
+        'expiry_time': expiry_time, # وقت الانتهاء بنظام Timestamp
         'is_active': True
     }
     update_db(data)
 
+# --- دالة التجديد (تمديد الوقت والسعة) ---
+def renew_user(email, extra_bytes, new_expiry):
+    data = load_db()
+    if email in data:
+        # تصفير الاستهلاك القديم أو إضافة سعة جديدة
+        data[email]['limit_bytes'] = extra_bytes
+        data[email]['expiry_time'] = new_expiry
+        data[email]['is_active'] = True
+        # ملاحظة: لا نصفر used_bytes إلا إذا أردت بدء الحساب من الصفر
+        data[email]['used_bytes'] = 0 
+        update_db(data)
+        return True
+    return False
+
 # ==========================================
-# 2. كائن (db) لحل مشكلة الإيرور في البوت
+# 2. كائن (db) لضمان التوافق مع بقية ملفات البوت
 # ==========================================
 class DummyDB:
     def init_db(self):
@@ -51,5 +66,5 @@ class DummyDB:
             del data[email]
             update_db(data)
 
-# إنشاء الكائن حتى يقرأه البوت بدون مشاكل
+# إنشاء الكائن لاستخدامه في الملفات الأخرى
 db = DummyDB()
