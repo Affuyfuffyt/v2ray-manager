@@ -95,7 +95,8 @@
       }
     },
     {
-      "listen": "/tmp/api.sock",
+      "port": 10086,
+      "listen": "127.0.0.1",
       "protocol": "dokodemo-door",
       "settings": {
         "address": "127.0.0.1"
