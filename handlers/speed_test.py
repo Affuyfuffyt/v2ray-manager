@@ -16,13 +16,13 @@ def register_speed_handlers(bot):
         try:
             duration = int(message.text)
             if duration > 60:
-                bot.send_message(chat_id, "❌ الحد الأقصى للفحص هو 60 ثانية لحماية السيرفر.")
+                bot.send_message(chat_id, "❌ الحد الأقصى للفحص هو 60 ثانية لحماية السيرفر من الحظر.")
                 return
         except:
-            bot.send_message(chat_id, "❌ يرجى إرسال رقم صحيح.")
+            bot.send_message(chat_id, "❌ يرجى إرسال رقم صحيح للثواني.")
             return
 
-        status_msg = bot.send_message(chat_id, "🔄 جاري بدء الفحص المباشر...")
+        status_msg = bot.send_message(chat_id, "🔄 جاري الاتصال بالسيرفر لبدء الفحص المباشر...")
         
         # تحديث الرسالة كل ثانية لتعطيك شعور الـ Dashboard المباشر!
         for i in range(duration):
@@ -41,7 +41,7 @@ def register_speed_handlers(bot):
                 text += f"⏱️ الوقت المتبقي: `{duration - i}` ثانية\n\n"
                 text += f"⬇️ سرعة التنزيل الحالية: `{down_mb:.2f} MB/s`\n"
                 text += f"⬆️ سرعة الرفع الحالية: `{up_mb:.2f} MB/s`\n\n"
-                text += "*(يتم التحديث تلقائياً...)*"
+                text += "*(يتم التحديث تلقائياً بالثانية...)*"
                 
                 bot.edit_message_text(text, chat_id, status_msg.message_id, parse_mode="Markdown")
             except Exception as e:
