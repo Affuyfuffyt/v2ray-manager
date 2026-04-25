@@ -13,15 +13,16 @@ API_SERVER = '127.0.0.1:10085'
 
 def start_quota_monitor():
     api = PanelAPI()
-    print(f"⏱️ Monitor Started (Independent Time & Quota Mode) on {API_SERVER}...")
+    print(f"⏱️ Monitor Started (Pro Mode) on {API_SERVER}...")
     
     while True:
         time.sleep(3) 
         
         # ==========================================
-        # 1. نظام العيون: جلب الإحصائيات (الجيجات والسرعة)
+        # 1. نظام العيون: جلب الإحصائيات المباشرة
         # ==========================================
         try:
+            # ضفنا أوامر متقدمة لإجبار Xray على الرد
             cmd = f"{XRAY_BIN} api statsquery -server={API_SERVER} -reset=true"
             result = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT, timeout=5).decode('utf-8')
             
@@ -52,16 +53,19 @@ def start_quota_monitor():
                 if db_changed:
                     update_db(db)
                     
-            # حفظ السرعة المباشرة للسيرفر
+            # حفظ السرعة المباشرة للسيرفر (لكي يقرأها زر الفحص المباشر)
             with open(SPEED_FILE, 'w') as f:
                 json.dump({'down_bps': current_down // 3, 'up_bps': current_up // 3}, f)
                 
+        except subprocess.CalledProcessError as e:
+            # إذا فشل الاتصال بالـ API راح نكتب الخطأ حتى نصيده
+            with open(ERROR_LOG, 'a') as f:
+                f.write(f"\n[Stats Error] {e.output.decode('utf-8')}")
         except Exception as e:
-            # نتجاهل أخطاء الإحصائيات حتى النظام ما يوكف ويكمل فحص الوقت الجوه
             pass
 
         # ==========================================
-        # 2. العقل المدبر القاسي: فحص الوقت والحدود والطرد (مستقل تماماً)
+        # 2. العقل المدبر القاسي: فحص الوقت والطرد
         # ==========================================
         try:
             db = load_db()
@@ -69,7 +73,6 @@ def start_quota_monitor():
             current_time = time.time()
             
             for email, user_data in list(db.items()):
-                # نفحص فقط المشتركين الفعالين حالياً
                 if user_data.get('is_active', True):
                     limit = user_data.get('limit_bytes', 0)
                     used = user_data.get('used_bytes', 0)
@@ -80,12 +83,9 @@ def start_quota_monitor():
                     
                     if expired_by_quota or expired_by_time:
                         reason = "الوقت ⏱️" if expired_by_time else "الجيجات 📊"
-                        print(f"🚫 تم القطع الإجباري عن: {email} بسبب انتهاء {reason}")
+                        print(f"🚫 تم القطع عن: {email} بسبب انتهاء {reason}")
                         
-                        # تعطيله بالداتا بيس
                         db[email]['is_active'] = False
-                        
-                        # القطع الفعلي من Xray
                         api.change_client_status(email, enable=False)
                         db_changed = True
                         
@@ -93,8 +93,4 @@ def start_quota_monitor():
                 update_db(db)
                 
         except Exception as e:
-            # تسجيل أخطاء العقل المدبر
-            error_msg = str(e)
-            with open(ERROR_LOG, 'w') as f:
-                f.write(f"Brain Error: {error_msg}")
             pass
