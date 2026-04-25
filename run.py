@@ -1,7 +1,9 @@
 import telebot
+import threading
 import config
 from xray_core.panel_api import PanelAPI
 from handlers import admin_start, create_flow, manage_flow
+from quota_monitor import start_quota_monitor # 👈 استدعاء عداد الجيجات
 
 # 1. تهيئة البوت والـ API
 bot = telebot.TeleBot(config.BOT_TOKEN)
@@ -24,10 +26,15 @@ def start(message):
     admin_start.show_main_menu(bot, message.chat.id)
 
 # ---------------------------------------------------------
-# 4. تشغيل البوت
+# 4. تشغيل البوت وعداد الجيجات
 # ---------------------------------------------------------
 if __name__ == "__main__":
     print(f"🚀 البوت يعمل الآن للأدمن ID: {config.ADMIN_ID}")
+    
+    # 👈 تشغيل مراقب الاستهلاك (الكوتا) في خيط منفصل
+    monitor_thread = threading.Thread(target=start_quota_monitor, daemon=True)
+    monitor_thread.start()
+    print("📊 نظام حساب الجيجابايت (الكوتا) يعمل الآن بالخلفية...")
     
     try:
         bot.infinity_polling()
