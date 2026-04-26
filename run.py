@@ -6,7 +6,7 @@ import time
 import config
 from xray_core.panel_api import PanelAPI
 from handlers import admin_start, create_flow, manage_flow, speed_test
-# الكودات القديمة مستدعاة بس ما راح تشتغل بالخلفية
+# استدعاء المراقب (صار جاهز للعمل بالخلفية)
 from quota_monitor import start_quota_monitor 
 
 # 1. تهيئة البوت والـ API
@@ -80,9 +80,7 @@ speed_test.register_speed_handlers(bot)
 def start(message):
     admin_start.show_main_menu(bot, message.chat.id)
 
-# ----------------- أوامر حالة الخادم -----------------
-
-# 🔥 التعديل هنا: تحويل الاستقبال إلى زر شفاف (Callback) بدلاً من رسالة نصية 🔥
+# ----------------- أوامر حالة الخادم (Callback) -----------------
 @bot.callback_query_handler(func=lambda call: call.data == "server_status")
 def send_server_status(call):
     text = get_server_status_text()
@@ -141,11 +139,10 @@ def handle_status_callbacks(call):
 if __name__ == "__main__":
     print(f"🚀 البوت يعمل الآن للأدمن ID: {config.ADMIN_ID}")
     
-    # 🔥 التعديل هنا: تم إيقاف مراقب الاستهلاك والسرعة بالخلفية لتخفيف الضغط على السيرفر 🔥
-    # monitor_thread = threading.Thread(target=start_quota_monitor, daemon=True)
-    # monitor_thread.start()
-    # print("📊 نظام حساب الجيجابايت والسرعة يعمل الآن بالخلفية...")
-    print("⚠️ تم إيقاف نظام حساب الجيجابايت والمراقبة لتخفيف الضغط على السيرفر.")
+    # ✅ تم تفعيل مراقب الوقت بالخلفية لضمان طرد المشتركين المنتهين
+    monitor_thread = threading.Thread(target=start_quota_monitor, daemon=True)
+    monitor_thread.start()
+    print("📊 نظام مراقبة الوقت (والطرد الفوري) يعمل الآن بالخلفية...")
     
     try:
         # البدء باستقبال أوامر التلجرام
