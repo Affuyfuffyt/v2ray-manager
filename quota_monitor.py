@@ -1,79 +1,20 @@
 import time
-import subprocess
-import json
-import os
 from database import load_db, update_db
 from xray_core.panel_api import PanelAPI
 
 # مسارات كاملة - تأكد من صحتها في سيرفرك
-SPEED_FILE = '/home/wathfor/v2ray_manager/live_speed.json'
 ERROR_LOG = '/home/wathfor/v2ray_manager/monitor_error.log'
-XRAY_BIN = '/home/wathfor/xray_core/xray'
-
-# 🔥 التحديث النهائي: استخدام المنفذ المخفي (Ghost Port) لتجاوز قيود الاستضافة 🔥
-API_SERVER = '127.0.0.1:10086'
 
 def start_quota_monitor():
     api = PanelAPI()
-    print(f"🕵️‍♂️ نظام المراقبة الاحترافي يعمل الآن عبر المنفذ المخفي: {API_SERVER}")
+    print("🕵️‍♂️ نظام مراقبة الوقت الاحترافي يعمل الآن (تم إلغاء نظام الجيجات لتخفيف الضغط على السيرفر)")
     
     while True:
-        time.sleep(4) # مهلة بسيطة لضمان استقرار القراءة
+        time.sleep(3) # المهلة الأساسية 3 ثواني لفحص الوقت فقط (خفيف جداً على المعالج)
         
-        try:
-            # 1. جلب البيانات الخام من المحرك عبر البورت الجديد
-            cmd = f"{XRAY_BIN} api statsquery -server={API_SERVER} -reset=true"
-            result = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT, timeout=5).decode('utf-8')
-            
-            current_down = 0
-            current_up = 0
-            
-            if result.strip():
-                stats = json.loads(result)
-                stat_list = stats.get('stat', [])
-                
-                db = load_db()
-                db_changed = False
-                
-                # طباعة البيانات للمراقبة في سجلات Alwaysdata
-                if stat_list:
-                    print(f"📊 تم رصد {len(stat_list)} سجل إحصائيات...")
-
-                for stat in stat_list:
-                    name = stat.get('name', '')
-                    value = int(stat.get('value', 0))
-                    
-                    if value <= 0: continue
-                    
-                    # حساب السرعة العامة للسيرفر
-                    if 'downlink' in name: current_down += value
-                    if 'uplink' in name: current_up += value
-                    
-                    # الفرز الذكي للمستخدمين
-                    if 'user>>>' in name and '>>>traffic>>>' in name:
-                        parts = name.split('>>>')
-                        if len(parts) >= 2:
-                            email = parts[1]
-                            if email in db:
-                                db[email]['used_bytes'] = db[email].get('used_bytes', 0) + value
-                                db_changed = True
-                                print(f"✅ تم تسجيل {value} بايت للمستخدم: {email}")
-                            else:
-                                print(f"⚠️ تنبيه: رصد استهلاك للاسم ({email}) غير موجود بالداتا بيس!")
-                            
-                if db_changed:
-                    update_db(db)
-            
-            # تحديث ملف السرعة لزر الفحص المباشر
-            with open(SPEED_FILE, 'w') as f:
-                json.dump({'down_bps': current_down // 4, 'up_bps': current_up // 4}, f)
-                
-        except Exception as e:
-            with open(ERROR_LOG, 'a') as f:
-                f.write(f"\n[{time.ctime()}] Monitor Logic Error: {str(e)}")
-            pass
-
-        # 2. نظام الطرد الصارم (وقت + جيجات)
+        # =========================================================
+        # 1. نظام الطرد الصارم للوقت ⏱️ (يشتغل كل 3 ثواني)
+        # =========================================================
         try:
             db = load_db()
             db_changed = False
@@ -81,21 +22,18 @@ def start_quota_monitor():
             
             for email, data in list(db.items()):
                 if data.get('is_active', True):
-                    limit = data.get('limit_bytes', 0)
-                    used = data.get('used_bytes', 0)
                     expiry = data.get('expiry_time', 0)
                     
-                    is_quota_done = (limit > 0 and used >= limit)
-                    is_time_done = (expiry > 0 and now >= expiry)
-                    
-                    if is_quota_done or is_time_done:
-                        reason = "الوقت ⏱️" if is_time_done else "البيانات 📊"
-                        print(f"🚫 طرد فوري: {email} | السبب: انتهاء {reason}")
+                    # فحص انتهاء المدة فقط
+                    if expiry > 0 and now >= expiry:
+                        print(f"⏱️ طرد فوري: {email} | السبب: انتهاء الوقت")
                         db[email]['is_active'] = False
                         api.change_client_status(email, enable=False)
                         db_changed = True
             
             if db_changed:
                 update_db(db)
-        except:
+        except Exception as e:
+            with open(ERROR_LOG, 'a') as f:
+                f.write(f"\n[{time.ctime()}] Time Monitor Logic Error: {str(e)}")
             pass
