@@ -333,3 +333,12 @@ def register_create_handlers(bot):
         
         # تنظيف الذاكرة بعد الاكتمال
         creation_data.pop(chat_id, None)
+
+        # 🔄 التحديث الجديد: عمل ريستارت للسيرفر عبر API لتفعيل الكود فوراً
+        try:
+            from xray_core.panel_api import PanelAPI
+            api_restart = PanelAPI()
+            api_restart.restart_server()
+            bot.send_message(chat_id, "🔄 تم عمل ريستارت سريع للسيرفر لتفعيل الكود...")
+        except Exception as e:
+            print(f"Error restarting server: {e}")
