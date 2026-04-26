@@ -6,7 +6,8 @@ import time
 import config
 from xray_core.panel_api import PanelAPI
 from handlers import admin_start, create_flow, manage_flow, speed_test
-from quota_monitor import start_quota_monitor
+# الكودات القديمة مستدعاة بس ما راح تشتغل بالخلفية
+from quota_monitor import start_quota_monitor 
 
 # 1. تهيئة البوت والـ API
 bot = telebot.TeleBot(config.BOT_TOKEN)
@@ -80,11 +81,14 @@ def start(message):
     admin_start.show_main_menu(bot, message.chat.id)
 
 # ----------------- أوامر حالة الخادم -----------------
-@bot.message_handler(func=lambda message: message.text == "🖥️ حالة الخادم", is_admin=True)
-def send_server_status(message):
+
+# 🔥 التعديل هنا: تحويل الاستقبال إلى زر شفاف (Callback) بدلاً من رسالة نصية 🔥
+@bot.callback_query_handler(func=lambda call: call.data == "server_status")
+def send_server_status(call):
     text = get_server_status_text()
     markup = get_status_keyboard()
-    bot.send_message(message.chat.id, text, reply_markup=markup, parse_mode="Markdown")
+    bot.send_message(call.message.chat.id, text, reply_markup=markup, parse_mode="Markdown")
+    bot.answer_callback_query(call.id)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("status_"))
 def handle_status_callbacks(call):
