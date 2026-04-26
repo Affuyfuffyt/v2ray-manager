@@ -137,10 +137,11 @@ def handle_status_callbacks(call):
 if __name__ == "__main__":
     print(f"🚀 البوت يعمل الآن للأدمن ID: {config.ADMIN_ID}")
     
-    # تشغيل مراقب الاستهلاك والسرعة بالخلفية (ليقوم بسحب الأرقام من المحرك)
-    monitor_thread = threading.Thread(target=start_quota_monitor, daemon=True)
-    monitor_thread.start()
-    print("📊 نظام حساب الجيجابايت والسرعة يعمل الآن بالخلفية...")
+    # 🔥 التعديل هنا: تم إيقاف مراقب الاستهلاك والسرعة بالخلفية لتخفيف الضغط على السيرفر 🔥
+    # monitor_thread = threading.Thread(target=start_quota_monitor, daemon=True)
+    # monitor_thread.start()
+    # print("📊 نظام حساب الجيجابايت والسرعة يعمل الآن بالخلفية...")
+    print("⚠️ تم إيقاف نظام حساب الجيجابايت والمراقبة لتخفيف الضغط على السيرفر.")
     
     try:
         # البدء باستقبال أوامر التلجرام
