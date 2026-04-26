@@ -18,23 +18,35 @@ class PanelAPI:
             with open(CONFIG_PATH, 'r') as f:
                 config = json.load(f)
             
-            # تحديد الغرفة وإضافة (level: 0) لتفعيل العداد الداخلي
-            if protocol == "vless":
-                target_inbound = 1
-                new_client = {"id": uuid, "email": email, "level": 0}
-            elif protocol == "vmess":
-                target_inbound = 2
+            # 🔥 تعديل حاسم: إضافة اليوزرات للـ Fallback (المنفذ الرئيسي 8100) ليتم حسابهم 🔥
+            # حتى لو كان اتصالهم WS، البورت الرئيسي هو الذي يمسك الترافيك الحقيقي
+            main_inbound = 0
+            
+            if protocol == "vless" or protocol == "vmess":
                 new_client = {"id": uuid, "email": email, "level": 0}
             elif protocol == "trojan":
-                target_inbound = 3
                 new_client = {"password": uuid, "email": email, "level": 0} 
             else:
-                target_inbound = 1
                 new_client = {"id": uuid, "email": email, "level": 0}
+
+            # إضافة المشترك للـ Fallback (البوابة الرئيسية)
+            clients_main = config['inbounds'][main_inbound]['settings']['clients']
+            if not any(c.get('email') == email for c in clients_main):
+                clients_main.append(new_client)
+
+            # إضافته للـ WS Inbound الخاص به لكي يعمل الاتصال (كودك الأصلي)
+            if protocol == "vless":
+                target_inbound = 1
+            elif protocol == "vmess":
+                target_inbound = 2
+            elif protocol == "trojan":
+                target_inbound = 3
+            else:
+                target_inbound = 1
             
-            clients = config['inbounds'][target_inbound]['settings']['clients']
-            if not any(c.get('email') == email for c in clients):
-                clients.append(new_client)
+            clients_ws = config['inbounds'][target_inbound]['settings']['clients']
+            if not any(c.get('email') == email for c in clients_ws):
+                clients_ws.append(new_client)
             
             with open(CONFIG_PATH, 'w') as f:
                 json.dump(config, f, indent=2)
@@ -51,19 +63,8 @@ class PanelAPI:
         time.sleep(0.5)
         
         # 2. التشغيل القانوني: نطلب من منصة Alwaysdata تشغيل الموقع رسمياً
-        if self.api_key and self.site_id:
-            try:
-                url = f"https://api.alwaysdata.com/v1/site/{self.site_id}/restart/"
-                response = requests.post(url, auth=(self.api_key, ''))
-                
-                if response.status_code == 204:
-                    print("✅ Successfully restarted site via API")
-                    return True
-                else:
-                    print(f"⚠️ API Restart failed with status: {response.status_code}")
-            except Exception as e:
-                print(f"API Restart Error: {e}")
-        
+        # بما أننا حولنا Xray لـ Service، إعادة التشغيل هنا غير ضرورية للخدمة، لكنها مهمة لقتل القديم
+        # لأن الـ Service ستقوم بتشغيله تلقائياً بعد أن تقتله أنت.
         return True
 
     def get_client_traffic(self, email):
@@ -75,7 +76,8 @@ class PanelAPI:
                 config = json.load(f)
             
             changed = False
-            for i in range(1, 4):
+            # البحث في جميع الـ inbounds وحذف المشترك (من الرئيسي والـ WS)
+            for i in range(4): # غيرناها لـ 4 لكي تشمل الـ Fallback (0)
                 try:
                     clients = config['inbounds'][i]['settings']['clients']
                     if not enable:
