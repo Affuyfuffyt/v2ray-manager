@@ -80,7 +80,9 @@ speed_test.register_speed_handlers(bot)
 def start(message):
     admin_start.show_main_menu(bot, message.chat.id)
 
-# ----------------- أوامر حالة الخادم (Callback) -----------------
+# ----------------- أوامر حالة الخادم -----------------
+
+# 🔥 التعديل هنا: تحويل الاستقبال إلى زر شفاف (Callback) بدلاً من رسالة نصية 🔥
 @bot.callback_query_handler(func=lambda call: call.data == "server_status")
 def send_server_status(call):
     text = get_server_status_text()
