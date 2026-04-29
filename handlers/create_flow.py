@@ -334,12 +334,23 @@ def register_create_handlers(bot):
         # تنظيف الذاكرة بعد الاكتمال
         creation_data.pop(chat_id, None)
 
-        # 🔄 التحديث الأخير الجذري: ريستارت داخلي مباشر لمحرك Xray (بدون استخدام API)
+        # 🔄 الإضافة المطلوبة: عمل ريستارت مباشر لـ Xray عبر الـ API الرسمي لـ Alwaysdata
         try:
-            import os
-            # أمر قتل المحرك القديم وتشغيله مرة أخرى بصمت بالخلفية
-            restart_cmd = "pkill -9 xray; nohup /home/wathfor/xray_core/xray run -c /home/wathfor/xray_core/config.json > /dev/null 2>&1 &"
-            os.system(restart_cmd)
-            bot.send_message(chat_id, "🔄 تم عمل ريستارت داخلي لمحرك Xray لتفعيل الكود فوراً!")
+            import requests
+            import config
+            
+            # رابط الـ API الرسمي لمنصة Alwaysdata (يعتمد على الـ Site ID الخاص بك)
+            alwaysdata_url = f"https://api.alwaysdata.com/v1/site/{config.SITE_ID}/restart/"
+            
+            # إرسال طلب الريستارت (يستخدم مفتاح الـ API كـ يوزرنيم)
+            response = requests.post(alwaysdata_url, auth=(config.ALWAYSDATA_API_KEY, ''))
+            
+            # التأكد من نجاح الطلب
+            if response.status_code == 204 or response.status_code == 200:
+                bot.send_message(chat_id, "🔄 تم عمل ريستارت تلقائي لـ Xray من إعدادات Alwaysdata بنجاح!")
+            else:
+                bot.send_message(chat_id, f"⚠️ فشل الريستارت التلقائي من المنصة. كود الخطأ: {response.status_code}")
+                
         except Exception as e:
-            print(f"Error local restart: {e}")
+            print(f"Alwaysdata API Error: {e}")
+            bot.send_message(chat_id, "⚠️ حدث خطأ في الاتصال بـ API منصة Alwaysdata.")
