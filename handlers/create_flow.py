@@ -4,7 +4,7 @@ import random
 import string
 import json
 import base64
-import time # 👈 ضروري جداً لحساب وقت الانتهاء بالثانية
+import time 
 
 # قاموس لحفظ بيانات الإنشاء المؤقتة قبل إرسالها للسيرفر
 creation_data = {}
@@ -77,8 +77,8 @@ def register_create_handlers(bot):
     def process_ws(call):
         chat_id = call.message.chat.id
         creation_data[chat_id]['network'] = 'ws'
-        # تم تحديد المسار إجبارياً ليتطابق مع طلبك
-        creation_data[chat_id]['path'] = '/Telegram-@338888'
+        # 🔥 التعديل هنا: شلنا السلاش (/) حتى يطابق الكود القديم اللي جان يشتغل
+        creation_data[chat_id]['path'] = 'Telegram-@338888'
         ask_uuid(chat_id, bot, call.message.message_id)
 
     # 5. اختيار المعرف (UUID)
@@ -237,8 +237,8 @@ def register_create_handlers(bot):
         data = creation_data[chat_id]
         protocol = data.get('protocol', 'vless').lower()
 
-        # === التحديث الأصلي: تحديد المسار الذكي حسب البروتوكول ===
-        fixed_path = f"/Telegram-@338888-{protocol}"
+        # 🔥 التعديل هنا: شلنا السلاش (/) حتى يطابق الكود القديم
+        fixed_path = "Telegram-@338888"
         data['path'] = fixed_path
 
         # === حساب وقت الانتهاء بالثانية (Timestamp) ===
@@ -283,10 +283,10 @@ def register_create_handlers(bot):
 
         # توليد الرابط حسب البروتوكول المختار مع إجبار المسار الذكي
         if protocol == "vless":
-            final_link = f"vless://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={fixed_path}{sni_str}#{data['name']}"
+            final_link = f"vless://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path=/{fixed_path}{sni_str}#{data['name']}"
             
         elif protocol == "trojan":
-            final_link = f"trojan://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={fixed_path}{sni_str}#{data['name']}"
+            final_link = f"trojan://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path=/{fixed_path}{sni_str}#{data['name']}"
             
         elif protocol == "vmess":
             vmess_dict = {
@@ -300,7 +300,7 @@ def register_create_handlers(bot):
                 "net": "ws",
                 "type": "none",
                 "host": host_domain,
-                "path": fixed_path,
+                "path": f"/{fixed_path}",
                 "tls": security_type,
                 "sni": sni_param,
                 "alpn": ""
@@ -309,7 +309,7 @@ def register_create_handlers(bot):
             vmess_b64 = base64.b64encode(vmess_json.encode('utf-8')).decode('utf-8')
             final_link = f"vmess://{vmess_b64}"
         else:
-            final_link = f"vless://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={fixed_path}{sni_str}#{data['name']}"
+            final_link = f"vless://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path=/{fixed_path}{sni_str}#{data['name']}"
         
         quota_display = "بلا حدود ♾️" if data['quota_bytes'] == 0 else f"{data['quota_bytes'] / (1024**3):.2f} GB"
         
@@ -319,7 +319,7 @@ def register_create_handlers(bot):
 👤 **الاسم:** `{data['name']}`
 🌐 **البروتوكول:** `{protocol.upper()}`
 🚪 **البورت:** `{selected_port}`
-🛤️ **المسار:** `{fixed_path}`
+🛤️ **المسار:** `/{fixed_path}`
 🔑 **المعرف:** `{data['uuid']}`
 👥 **الأجهزة المتصلة:** `{data['ips']}`
 ⏳ **المدة:** `{data['duration_str']}`
