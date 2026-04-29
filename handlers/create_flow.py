@@ -4,7 +4,7 @@ import random
 import string
 import json
 import base64
-import time # 👈 ضروري جداً لحساب وقت الانتهاء بالثانية
+import time 
 
 # قاموس لحفظ بيانات الإنشاء المؤقتة قبل إرسالها للسيرفر
 creation_data = {}
@@ -77,7 +77,7 @@ def register_create_handlers(bot):
     def process_ws(call):
         chat_id = call.message.chat.id
         creation_data[chat_id]['network'] = 'ws'
-        # تم تحديد المسار إجبارياً ليتطابق مع طلبك
+        # المسار الأصلي (بدون تخبيص)
         creation_data[chat_id]['path'] = '/Telegram-@338888'
         ask_uuid(chat_id, bot, call.message.message_id)
 
@@ -237,8 +237,8 @@ def register_create_handlers(bot):
         data = creation_data[chat_id]
         protocol = data.get('protocol', 'vless').lower()
 
-        # === التحديث الجديد: تحديد المسار الذكي حسب البروتوكول ===
-        fixed_path = f"/Telegram-@338888-{protocol}"
+        # 🔥 التعديل المهم: رجعت المسار الأصلي بدون إضافة اسم البروتوكول حتى يطابق السيرفر
+        fixed_path = "/Telegram-@338888"
         data['path'] = fixed_path
 
         # === حساب وقت الانتهاء بالثانية (Timestamp) ===
@@ -281,7 +281,7 @@ def register_create_handlers(bot):
             sni_param = ""
             sni_str = ""
 
-        # توليد الرابط حسب البروتوكول المختار مع إجبار المسار الذكي
+        # توليد الرابط حسب البروتوكول المختار 
         if protocol == "vless":
             final_link = f"vless://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={fixed_path}{sni_str}#{data['name']}"
             
@@ -334,7 +334,7 @@ def register_create_handlers(bot):
         # تنظيف الذاكرة بعد الاكتمال
         creation_data.pop(chat_id, None)
 
-        # 🔄 الإضافة المطلوبة: عمل ريستارت مباشر لـ Xray عبر الـ API الرسمي لـ Alwaysdata
+        # 🔄 ريستارت حقيقي من إعدادات Alwaysdata (من قسم Advanced > Sites)
         try:
             import requests
             import config
@@ -342,15 +342,14 @@ def register_create_handlers(bot):
             # رابط الـ API الرسمي لمنصة Alwaysdata (يعتمد على الـ Site ID الخاص بك)
             alwaysdata_url = f"https://api.alwaysdata.com/v1/site/{config.SITE_ID}/restart/"
             
-            # إرسال طلب الريستارت (يستخدم مفتاح الـ API كـ يوزرنيم)
+            # إرسال طلب الريستارت
             response = requests.post(alwaysdata_url, auth=(config.ALWAYSDATA_API_KEY, ''))
             
             # التأكد من نجاح الطلب
             if response.status_code == 204 or response.status_code == 200:
-                bot.send_message(chat_id, "🔄 تم عمل ريستارت تلقائي لـ Xray من إعدادات Alwaysdata بنجاح!")
+                bot.send_message(chat_id, "🔄 تم عمل ريستارت تلقائي للسيرفر من إعدادات Alwaysdata بنجاح!")
             else:
                 bot.send_message(chat_id, f"⚠️ فشل الريستارت التلقائي من المنصة. كود الخطأ: {response.status_code}")
                 
         except Exception as e:
-            print(f"Alwaysdata API Error: {e}")
-            bot.send_message(chat_id, "⚠️ حدث خطأ في الاتصال بـ API منصة Alwaysdata.")
+            bot.send_message(chat_id, "⚠️ حدث خطأ في الاتصال بـ API منصة Alwaysdata. يرجى التأكد من المفاتيح في config.py")
