@@ -334,11 +334,22 @@ def register_create_handlers(bot):
         # تنظيف الذاكرة بعد الاكتمال
         creation_data.pop(chat_id, None)
 
-        # 🔄 التحديث الجديد: عمل ريستارت للسيرفر عبر API لتفعيل الكود فوراً
+        # 🔄 التحديث الجديد: عمل ريستارت مباشر عبر Alwaysdata API
         try:
-            from xray_core.panel_api import PanelAPI
-            api_restart = PanelAPI()
-            api_restart.restart_server()
-            bot.send_message(chat_id, "🔄 تم عمل ريستارت سريع للسيرفر لتفعيل الكود...")
+            import requests
+            import config
+            
+            # رابط الـ API الخاص بـ Alwaysdata
+            url = f"https://api.alwaysdata.com/v1/site/{config.SITE_ID}/restart/"
+            
+            # إرسال طلب الريستارت (باستخدام مفتاحك كـ Username)
+            response = requests.post(url, auth=(config.ALWAYSDATA_API_KEY, ''))
+            
+            if response.status_code in [200, 204]:
+                bot.send_message(chat_id, "🔄 تم عمل ريستارت سريع للسيرفر لتفعيل الكود بنجاح!")
+            else:
+                bot.send_message(chat_id, f"⚠️ الكود انحفظ، بس الريستارت التلقائي فشل (كود الخطأ: {response.status_code}). سوي ريستارت يدوي.")
+                print(f"Alwaysdata API Error: {response.text}")
+                
         except Exception as e:
-            print(f"Error restarting server: {e}")
+            print(f"Error restarting via API: {e}")
