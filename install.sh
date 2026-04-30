@@ -13,6 +13,7 @@ read -p "🔑 أدخل توكن البوت: " BOT_TOKEN
 read -p "👑 أدخل الآيدي الخاص بك: " ADMIN_ID
 read -p "🛠️ أدخل Alwaysdata API Key: " AD_API_KEY
 read -p "🆔 أدخل Site ID الخاص بك: " AD_SITE_ID
+read -p "🌐 أدخل الدومين الخاص بك (مثال: wathfor.alwaysdata.net): " AD_DOMAIN
 
 # 3. تجهيز المجلدات
 WORK_DIR="$HOME/v2ray_manager"
@@ -44,11 +45,13 @@ echo "BOT_TOKEN=$BOT_TOKEN" > .env
 echo "ADMIN_ID=$ADMIN_ID" >> .env
 echo "AD_API_KEY=$AD_API_KEY" >> .env
 echo "AD_SITE_ID=$AD_SITE_ID" >> .env
+echo "AD_DOMAIN=$AD_DOMAIN" >> .env
 
-# 🔥 الإضافة الذكية: تجهيز ملف الريستارت التلقائي
-# السكربت راح يأخذ الـ Site ID والـ API ويحفظهن بملف مستقل حتى يقراهن البوت
+# 🔥 الإضافة الذكية: تجهيز ملف الريستارت التلقائي والدومين العالمي
+# السكربت راح يأخذ الـ Site ID والـ API والدومين ويحفظهن بملف مستقل حتى يقراهن البوت
 echo "$AD_SITE_ID" > $HOME/alwaysdata_keys.txt
 echo "$AD_API_KEY" >> $HOME/alwaysdata_keys.txt
+echo "$AD_DOMAIN" >> $HOME/alwaysdata_keys.txt
 
 # 8. تثبيت المكاتب وتشغيل البوت
 echo "[+] جاري تثبيت المتطلبات وتشغيل البوت..."
