@@ -5,10 +5,40 @@ import string
 import json
 import base64
 import time 
-import requests # 👈 ضروري للاتصال بـ API
+import requests 
+import threading # 👈 ضروري لعملية العداد التنازلي بالخلفية
+import os # 👈 للتعامل مع مسارات الملفات
 
 # قاموس لحفظ بيانات الإنشاء المؤقتة قبل إرسالها للسيرفر
 creation_data = {}
+
+# ==========================================
+# ⏱️ دالة العداد التنازلي لطرد المشترك (تعمل بالخلفية)
+# ==========================================
+def auto_restart_on_expiry(expiry_time):
+    wait_seconds = expiry_time - time.time()
+    if wait_seconds > 0:
+        # البوت راح ينام بالخلفية هنا بدون ما يأثر على سرعة النظام لحد ما يخلص وقت المشترك
+        time.sleep(wait_seconds) 
+        
+    # من يخلص الوقت، يقرأ البيانات ويضرب الـ API حتى يسوي ريستارت ويفصل المشترك المنتهي
+    try:
+        home_dir = os.path.expanduser("~")
+        key_file = f"{home_dir}/alwaysdata_keys.txt"
+        
+        if os.path.exists(key_file):
+            with open(key_file, 'r') as f:
+                lines = f.read().strip().split('\n')
+                if len(lines) >= 2:
+                    SITE_ID = lines[0].strip()
+                    API_KEY = lines[1].strip()
+                    
+                    alwaysdata_url = f"https://api.alwaysdata.com/v1/site/{SITE_ID}/restart/"
+                    requests.post(alwaysdata_url, auth=(API_KEY, ''))
+                    print("🔄 تم عمل ريستارت تلقائي بسبب انتهاء صلاحية أحد المشتركين!")
+    except Exception as e:
+        print(f"Error in auto expiry restart: {e}")
+
 
 def register_create_handlers(bot):
 
@@ -267,12 +297,14 @@ def register_create_handlers(bot):
         except Exception as e:
             print(f"Error saving to DB: {e}")
 
+        # 🔥 إطلاق العداد التنازلي للريستارت بالخلفية لغرض فصل المشترك لاحقاً 🔥
+        threading.Thread(target=auto_restart_on_expiry, args=(expiry_time,), daemon=True).start()
+
         selected_port = data.get('port', 443)
         
         # 🌐 التحديث العالمي: قراءة الدومين برمجياً من السيرفر
         host_domain = "wathfor.alwaysdata.net" # قيمة افتراضية
         try:
-            import os
             home_dir = os.path.expanduser("~")
             key_file = f"{home_dir}/alwaysdata_keys.txt"
             if os.path.exists(key_file):
@@ -347,13 +379,9 @@ def register_create_handlers(bot):
         creation_data.pop(chat_id, None)
 
         # ==========================================
-        # 🔄 نظام الريستارت الذكي المستقل (من ملف نصي بالسيرفر فقط)
+        # 🔄 نظام الريستارت الذكي المباشر (بعد الإنشاء لعمل الكود فوراً)
         # ==========================================
         try:
-            import os
-            import requests
-            
-            # جلب المسار الرئيسي للسيرفر تلقائياً (حتى يشتغل على أي استضافة)
             home_dir = os.path.expanduser("~")
             key_file = f"{home_dir}/alwaysdata_keys.txt"
             
