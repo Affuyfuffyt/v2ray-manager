@@ -238,7 +238,7 @@ def register_create_handlers(bot):
         data = creation_data[chat_id]
         protocol = data.get('protocol', 'vless').lower()
 
-        # 🔥🔥 التعديل الأهم: رجعنا المسار الذكي اللي يضيف اسم البروتوكول 🔥🔥
+        # 🔥🔥 المسار الذكي اللي يضيف اسم البروتوكول 🔥🔥
         fixed_path = f"/Telegram-@338888-{protocol}"
         data['path'] = fixed_path
 
@@ -268,7 +268,20 @@ def register_create_handlers(bot):
             print(f"Error saving to DB: {e}")
 
         selected_port = data.get('port', 443)
-        host_domain = "wathfor.alwaysdata.net"
+        
+        # 🌐 التحديث العالمي: قراءة الدومين برمجياً من السيرفر
+        host_domain = "wathfor.alwaysdata.net" # قيمة افتراضية
+        try:
+            import os
+            home_dir = os.path.expanduser("~")
+            key_file = f"{home_dir}/alwaysdata_keys.txt"
+            if os.path.exists(key_file):
+                with open(key_file, 'r') as f:
+                    lines = f.read().strip().split('\n')
+                    if len(lines) >= 3 and lines[2].strip() != "":
+                        host_domain = lines[2].strip()
+        except Exception as e:
+            print(f"Error reading domain: {e}")
         
         # إعدادات الأمان حسب البورت
         if selected_port == 443:
