@@ -13,7 +13,7 @@ import os
 creation_data = {}
 
 # ==========================================
-# 🛠️ دالة إضافة وتصحيح المشترك لملف Xray يدوياً (المنقذ لبروتوكول التورجان)
+# 🛠️ دالة الإضافة الذكية (المنقذ الحقيقي لبروتوكول التورجان)
 # ==========================================
 def add_client_to_config(user_name, uuid_val, protocol):
     try:
@@ -27,15 +27,15 @@ def add_client_to_config(user_name, uuid_val, protocol):
             if "inbounds" in config_data:
                 for inbound in config_data["inbounds"]:
                     
-                    # 🔥 1. تنظيف أخطاء الـ API القديمة إذا خربط بالتورجان 🔥
+                    # 🔥 1. تنظيف أي أخطاء قديمة سواها الـ API بالتورجان 🔥
                     if inbound.get("protocol") == "trojan" and "settings" in inbound:
                         clients = inbound["settings"].setdefault("clients", [])
                         for c in clients:
-                            if "id" in c: # الـ API يغلط ويضيف id، احنا نصلحها الى password
+                            if "id" in c: 
                                 c["password"] = c.pop("id")
                                 modified = True
 
-                    # 🔥 2. إضافة المشترك الجديد حسب التاك (Tag) لضمان مكانه الصحيح 🔥
+                    # 🔥 2. زراعة المشترك الجديد في التاك (Tag) الخاص به فقط 🔥
                     if inbound.get("tag") == protocol and "settings" in inbound:
                         clients = inbound["settings"].setdefault("clients", [])
                         exists = any(c.get("id") == uuid_val or c.get("password") == uuid_val for c in clients)
@@ -45,8 +45,9 @@ def add_client_to_config(user_name, uuid_val, protocol):
                             elif protocol == "vmess":
                                 clients.append({"id": uuid_val, "email": user_name, "alterId": 0})
                             elif protocol == "trojan":
-                                clients.append({"password": uuid_val, "email": user_name}) # التورجان ياخذ password حصراً
+                                clients.append({"password": uuid_val, "email": user_name}) # التورجان حصراً يأخذ password
                             modified = True
+                        break # لقينا التاك الصح، نطلع من اللوب
                         
             if modified:
                 with open(config_path, 'w', encoding='utf-8') as f:
@@ -119,14 +120,15 @@ def auto_restart_on_expiry(bot, chat_id, expiry_time, user_name, uuid_val, proto
     # 🚨 انتهى الوقت!
     
     # 1. نحذف من الـ API 
-    try:
-        from xray_core.panel_api import PanelAPI
-        local_api = PanelAPI()
-        try: local_api.delete_client(user_name)
+    if protocol != "trojan":
+        try:
+            from xray_core.panel_api import PanelAPI
+            local_api = PanelAPI()
+            try: local_api.delete_client(user_name)
+            except: pass
+            try: local_api.remove_client(uuid_val)
+            except: pass
         except: pass
-        try: local_api.remove_client(uuid_val)
-        except: pass
-    except: pass
     
     # 2. نحذف من الملف يدوياً لضمان الطرد النهائي 100%
     remove_client_from_config(uuid_val)
@@ -357,15 +359,16 @@ def register_create_handlers(bot):
         
         expiry_time = time.time() + sec
 
-        # === 1. الإضافة للسيرفر عبر الـ API (إن أمكن) ===
-        try:
-            from xray_core.panel_api import PanelAPI
-            local_api = PanelAPI()
-            local_api.create_client(data['name'], data['uuid'], protocol)
-        except Exception as e:
-            print(f"PanelAPI Error: {e}")
+        # === 1. حجب الـ API عن التدخل بالتورجان نهائياً ===
+        if protocol != "trojan":
+            try:
+                from xray_core.panel_api import PanelAPI
+                local_api = PanelAPI()
+                local_api.create_client(data['name'], data['uuid'], protocol)
+            except Exception as e:
+                print(f"PanelAPI Error: {e}")
 
-        # === 2. تصحيح وإضافة المشترك يدوياً (المنقذ الحقيقي للكل وخاصة التورجان) ===
+        # === 2. تصحيح وإضافة المشترك يدوياً (المنقذ الحقيقي) ===
         add_client_to_config(data['name'], data['uuid'], protocol)
 
         # === 3. حفظ بقاعدة البيانات ===
@@ -404,7 +407,7 @@ def register_create_handlers(bot):
             sni_param = ""
             sni_str = ""
 
-        # === 5. توليد روابط الاتصال بذكاء لجميع التطبيقات ===
+        # === 5. توليد روابط الاتصال بذكاء ===
         if protocol == "vless":
             final_link = f"vless://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={fixed_path}&host={host_domain}{sni_str}#{data['name']}"
         elif protocol == "trojan":
