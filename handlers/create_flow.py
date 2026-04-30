@@ -9,40 +9,8 @@ import requests
 import threading 
 import os 
 
+# قاموس لحفظ بيانات الإنشاء المؤقتة
 creation_data = {}
-
-# ==========================================
-# 🛠️ دالة إضافة المشترك الجديد لملف Xray يدوياً (لضمان عمله فوراً)
-# ==========================================
-def add_client_to_config(user_name, uuid_val, protocol):
-    try:
-        home_dir = os.path.expanduser("~")
-        config_path = f"{home_dir}/xray_core/config.json"
-        if os.path.exists(config_path):
-            with open(config_path, 'r', encoding='utf-8') as f:
-                config_data = json.load(f)
-            
-            modified = False
-            if "inbounds" in config_data:
-                for inbound in config_data["inbounds"]:
-                    if inbound.get("protocol") == protocol and "settings" in inbound and "clients" in inbound["settings"]:
-                        # التأكد إن المشترك مو موجود أصلاً
-                        exists = any(c.get("id") == uuid_val or c.get("password") == uuid_val for c in inbound["settings"]["clients"])
-                        if not exists:
-                            if protocol == "vless":
-                                inbound["settings"]["clients"].append({"id": uuid_val, "email": user_name, "flow": ""})
-                            elif protocol == "vmess":
-                                inbound["settings"]["clients"].append({"id": uuid_val, "email": user_name, "alterId": 0})
-                            elif protocol == "trojan":
-                                inbound["settings"]["clients"].append({"password": uuid_val, "email": user_name})
-                            modified = True
-                        break 
-                        
-            if modified:
-                with open(config_path, 'w', encoding='utf-8') as f:
-                    json.dump(config_data, f, indent=4)
-    except Exception as e:
-        print(f"Error adding to config: {e}")
 
 # ==========================================
 # 🗑️ دالة حذف المشترك المنتهي من ملف Xray يدوياً (لضمان طرده)
@@ -322,7 +290,6 @@ def register_create_handlers(bot):
             creation_data[chat_id]['quota_bytes'] = quota_map[choice]
             finalize_creation(call.message, bot, is_manual=False)
 
-    # 9. إعطاء الملخص النهائي والاتصال الفعلي بالسيرفر المحلي
     def finalize_creation(message, bot, is_manual):
         chat_id = message.chat.id
         if is_manual:
@@ -348,25 +315,44 @@ def register_create_handlers(bot):
         
         expiry_time = time.time() + sec
 
-        # === 1. إضافة المشترك للسيرفر عبر الـ API المعتاد ===
+        # === 1. إضافة المشترك للسيرفر عبر الـ API ===
         try:
             from xray_core.panel_api import PanelAPI
             local_api = PanelAPI()
             local_api.create_client(data['name'], data['uuid'], protocol)
+            
+            # 🔥 تصحيح خطأ التورجان بملف الكونفك يدوياً بعد إضافة الـ API 🔥
+            if protocol == "trojan":
+                try:
+                    home_dir = os.path.expanduser("~")
+                    config_path = f"{home_dir}/xray_core/config.json"
+                    if os.path.exists(config_path):
+                        with open(config_path, 'r', encoding='utf-8') as f:
+                            cfg = json.load(f)
+                        modified = False
+                        if "inbounds" in cfg:
+                            for inbound in cfg["inbounds"]:
+                                if inbound.get("protocol") == "trojan" and "settings" in inbound:
+                                    for c in inbound["settings"].get("clients", []):
+                                        if "id" in c and c.get("id") == data['uuid']:
+                                            c["password"] = c.pop("id")
+                                            modified = True
+                        if modified:
+                            with open(config_path, 'w', encoding='utf-8') as f:
+                                json.dump(cfg, f, indent=4)
+                except Exception as ex:
+                    print("Trojan patch error:", ex)
         except Exception as e:
             print(f"Error connecting to local API: {e}")
 
-        # === 2. الإضافة اليدوية للملف لضمان التفعيل الفوري ===
-        add_client_to_config(data['name'], data['uuid'], protocol)
-
-        # === 3. حفظ بقاعدة البيانات ===
+        # === 2. حفظ بقاعدة البيانات ===
         try:
             from database import save_user
             save_user(data['name'], data['uuid'], data['quota_bytes'], expiry_time)
         except Exception as e:
             print(f"Error saving to DB: {e}")
 
-        # === 4. إطلاق العداد التنازلي للطرد بالخلفية ===
+        # === 3. إطلاق العداد التنازلي للطرد بالخلفية ===
         threading.Thread(
             target=auto_restart_on_expiry, 
             args=(bot, chat_id, expiry_time, data['name'], data['uuid'], protocol), 
@@ -374,6 +360,8 @@ def register_create_handlers(bot):
         ).start()
 
         selected_port = data.get('port', 443)
+        
+        # استخراج الدومين
         host_domain = "wathfor.alwaysdata.net" 
         try:
             home_dir = os.path.expanduser("~")
@@ -383,7 +371,7 @@ def register_create_handlers(bot):
                     lines = f.read().strip().split('\n')
                     if len(lines) >= 3 and lines[2].strip() != "":
                         host_domain = lines[2].strip()
-        except Exception as e:
+        except:
             pass
         
         if selected_port == 443:
@@ -395,10 +383,11 @@ def register_create_handlers(bot):
             sni_param = ""
             sni_str = ""
 
+        # === 4. توليد روابط الاتصال بذكاء لجميع التطبيقات ===
         if protocol == "vless":
-            final_link = f"vless://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={fixed_path}{sni_str}#{data['name']}"
+            final_link = f"vless://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={fixed_path}&host={host_domain}{sni_str}#{data['name']}"
         elif protocol == "trojan":
-            final_link = f"trojan://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={fixed_path}{sni_str}#{data['name']}"
+            final_link = f"trojan://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={fixed_path}&host={host_domain}{sni_str}#{data['name']}"
         elif protocol == "vmess":
             vmess_dict = {
                 "v": "2", "ps": data['name'], "add": host_domain, "port": str(selected_port),
@@ -409,7 +398,7 @@ def register_create_handlers(bot):
             vmess_b64 = base64.b64encode(vmess_json.encode('utf-8')).decode('utf-8')
             final_link = f"vmess://{vmess_b64}"
         else:
-            final_link = f"vless://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={fixed_path}{sni_str}#{data['name']}"
+            final_link = f"vless://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={fixed_path}&host={host_domain}{sni_str}#{data['name']}"
         
         quota_display = "بلا حدود ♾️" if data['quota_bytes'] == 0 else f"{data['quota_bytes'] / (1024**3):.2f} GB"
         summary = f"""
@@ -430,8 +419,8 @@ def register_create_handlers(bot):
         bot.send_message(chat_id, summary, parse_mode="Markdown")
         creation_data.pop(chat_id, None)
 
-        # === 5. ريستارت فوري لتفعيل المشترك الجديد ===
-        time.sleep(1) # استراحة ثانية لضمان اكتمال الكتابة على الملفات
+        # === 5. ريستارت فوري لتفعيل الكود ===
+        time.sleep(1) 
         success_msg = "🔄 تم الريستارت التلقائي للسيرفر بنجاح! 🚀 الكود هسه شغال."
         fail_msg = "⚠️ الكود انحفظ، بس فشل الريستارت التلقائي."
         restart_alwaysdata(bot, chat_id, success_msg, fail_msg)
