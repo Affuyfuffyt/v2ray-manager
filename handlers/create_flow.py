@@ -4,7 +4,8 @@ import random
 import string
 import json
 import base64
-import time # 👈 ضروري جداً لحساب وقت الانتهاء بالثانية
+import time 
+import requests # 👈 ضروري للاتصال بـ API
 
 # قاموس لحفظ بيانات الإنشاء المؤقتة قبل إرسالها للسيرفر
 creation_data = {}
@@ -334,22 +335,27 @@ def register_create_handlers(bot):
         # تنظيف الذاكرة بعد الاكتمال
         creation_data.pop(chat_id, None)
 
-        # 🔄 الحل النهائي: ريستارت رسمي ونظيف عبر API الخاص بـ Alwaysdata
+        # ==========================================
+        # 🔄 نظام الريستارت التلقائي من موقع Alwaysdata
+        # ==========================================
         try:
-            import requests
-            import config
+            # 🚨🚨🚨 غير هاي الكلمة وخلي الـ API Token مالتك من موقع Alwaysdata 🚨🚨🚨
+            ALWAYSDATA_API_KEY = "ضع_مفتاح_ال_API_هنا" 
             
-            alwaysdata_url = f"https://api.alwaysdata.com/v1/site/{config.SITE_ID}/restart/"
+            # رقم الموقع مالتك جبته من الصورة اللي دزيتها
+            SITE_ID = "1036371" 
             
-            # إرسال طلب الريستارت لمنصة Alwaysdata باستخدام مفتاح الـ API
-            response = requests.post(alwaysdata_url, auth=(config.ALWAYSDATA_API_KEY, ''))
+            alwaysdata_url = f"https://api.alwaysdata.com/v1/site/{SITE_ID}/restart/"
             
-            if response.status_code == 204 or response.status_code == 200:
-                bot.send_message(chat_id, "🔄 تم إرسال أمر الريستارت الرسمي لمنصة Alwaysdata بنجاح!")
+            # إرسال طلب الريستارت للموقع
+            response = requests.post(alwaysdata_url, auth=(ALWAYSDATA_API_KEY, ''))
+            
+            if response.status_code in [200, 204]:
+                bot.send_message(chat_id, "🔄 تم إرسال أمر الريستارت لإعدادات Alwaysdata بنجاح! (الكود هسه شغال)")
             else:
-                bot.send_message(chat_id, f"⚠️ فشل الريستارت عبر المنصة. كود الخطأ: {response.status_code}")
+                bot.send_message(chat_id, f"⚠️ الكود انحفظ، بس ريستارت الموقع فشل. كود الخطأ: {response.status_code}")
                 print(f"Alwaysdata API Error: {response.text}")
                 
         except Exception as e:
-            bot.send_message(chat_id, "⚠️ حدث خطأ في الاتصال بمنصة Alwaysdata.")
-            print(f"Alwaysdata API Request Error: {e}")
+            bot.send_message(chat_id, "⚠️ الكود انحفظ، بس صار خلل بالاتصال وي موقع Alwaysdata.")
+            print(f"Alwaysdata Request Error: {e}")
