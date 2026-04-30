@@ -6,22 +6,23 @@ import json
 import base64
 import time 
 import requests 
-import threading # 👈 ضروري لعملية العداد التنازلي بالخلفية
-import os # 👈 للتعامل مع مسارات الملفات
+import threading # 👈 لعملية العداد التنازلي بالخلفية
+import os 
 
 # قاموس لحفظ بيانات الإنشاء المؤقتة قبل إرسالها للسيرفر
 creation_data = {}
 
 # ==========================================
-# ⏱️ دالة العداد التنازلي لطرد المشترك (تعمل بالخلفية)
+# ⏱️ دالة العداد التنازلي لطرد المشترك (محدثة لترسل إشعار للتلكرام)
 # ==========================================
-def auto_restart_on_expiry(expiry_time):
+def auto_restart_on_expiry(bot, chat_id, expiry_time, user_name):
     wait_seconds = expiry_time - time.time()
+    
     if wait_seconds > 0:
-        # البوت راح ينام بالخلفية هنا بدون ما يأثر على سرعة النظام لحد ما يخلص وقت المشترك
+        # البوت ينام بالخلفية هنا لحد ما يخلص وقت المشترك
         time.sleep(wait_seconds) 
         
-    # من يخلص الوقت، يقرأ البيانات ويضرب الـ API حتى يسوي ريستارت ويفصل المشترك المنتهي
+    # 🚨 انتهى الوقت! الآن نضرب ريستارت ونرسل إشعار
     try:
         home_dir = os.path.expanduser("~")
         key_file = f"{home_dir}/alwaysdata_keys.txt"
@@ -34,8 +35,13 @@ def auto_restart_on_expiry(expiry_time):
                     API_KEY = lines[1].strip()
                     
                     alwaysdata_url = f"https://api.alwaysdata.com/v1/site/{SITE_ID}/restart/"
-                    requests.post(alwaysdata_url, auth=(API_KEY, ''))
-                    print("🔄 تم عمل ريستارت تلقائي بسبب انتهاء صلاحية أحد المشتركين!")
+                    response = requests.post(alwaysdata_url, auth=(API_KEY, ''))
+                    
+                    if response.status_code in [200, 201, 202, 204]:
+                        msg = f"🛑 **تنبيه انتهاء صلاحية!** 🛑\n\n👤 المشترك: `{user_name}`\n⏳ انتهى وقته للتو.\n🔄 **تم عمل ريستارت للسيرفر وطرده بنجاح!**"
+                        bot.send_message(chat_id, msg, parse_mode="Markdown")
+                    else:
+                        bot.send_message(chat_id, f"⚠️ انتهى وقت `{user_name}` ولكن فشل الريستارت التلقائي!")
     except Exception as e:
         print(f"Error in auto expiry restart: {e}")
 
@@ -268,7 +274,7 @@ def register_create_handlers(bot):
         data = creation_data[chat_id]
         protocol = data.get('protocol', 'vless').lower()
 
-        # 🔥🔥 المسار الذكي اللي يضيف اسم البروتوكول 🔥🔥
+        # المسار الذكي
         fixed_path = f"/Telegram-@338888-{protocol}"
         data['path'] = fixed_path
 
@@ -282,7 +288,7 @@ def register_create_handlers(bot):
         
         expiry_time = time.time() + sec
 
-        # إضافة المشترك للسيرفر الفعلي وإرسال نوع البروتوكول للفرز
+        # إضافة المشترك للسيرفر الفعلي
         try:
             from xray_core.panel_api import PanelAPI
             local_api = PanelAPI()
@@ -290,7 +296,7 @@ def register_create_handlers(bot):
         except Exception as e:
             print(f"Error connecting to local API: {e}")
 
-        # === حفظ المشترك وسعته ووقت انتهائه في قاعدة البيانات ===
+        # === حفظ المشترك بالداتا بيس ===
         try:
             from database import save_user
             save_user(data['name'], data['uuid'], data['quota_bytes'], expiry_time)
@@ -298,13 +304,14 @@ def register_create_handlers(bot):
             print(f"Error saving to DB: {e}")
 
         # 🔥 إطلاق العداد التنازلي للريستارت بالخلفية لغرض فصل المشترك لاحقاً 🔥
-        threading.Thread(target=auto_restart_on_expiry, args=(expiry_time,), daemon=True).start()
+        threading.Thread(target=auto_restart_on_expiry, args=(bot, chat_id, expiry_time, data['name']), daemon=True).start()
 
         selected_port = data.get('port', 443)
         
-        # 🌐 التحديث العالمي: قراءة الدومين برمجياً من السيرفر
-        host_domain = "wathfor.alwaysdata.net" # قيمة افتراضية
+        # قراءة الدومين برمجياً من السيرفر
+        host_domain = "wathfor.alwaysdata.net" 
         try:
+            import os
             home_dir = os.path.expanduser("~")
             key_file = f"{home_dir}/alwaysdata_keys.txt"
             if os.path.exists(key_file):
@@ -315,7 +322,7 @@ def register_create_handlers(bot):
         except Exception as e:
             print(f"Error reading domain: {e}")
         
-        # إعدادات الأمان حسب البورت
+        # إعدادات الأمان
         if selected_port == 443:
             security_type = "tls"
             sni_param = host_domain
@@ -325,13 +332,11 @@ def register_create_handlers(bot):
             sni_param = ""
             sni_str = ""
 
-        # توليد الرابط حسب البروتوكول المختار
+        # توليد الرابط
         if protocol == "vless":
             final_link = f"vless://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={fixed_path}{sni_str}#{data['name']}"
-            
         elif protocol == "trojan":
             final_link = f"trojan://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={fixed_path}{sni_str}#{data['name']}"
-            
         elif protocol == "vmess":
             vmess_dict = {
                 "v": "2",
@@ -394,7 +399,6 @@ def register_create_handlers(bot):
                         
                         alwaysdata_url = f"https://api.alwaysdata.com/v1/site/{SITE_ID}/restart/"
                         
-                        # مهلة ثانية وحدة حتى يلحق السيرفر يحفظ بيانات المشترك الجديد
                         time.sleep(1)
                         response = requests.post(alwaysdata_url, auth=(API_KEY, ''))
                         
