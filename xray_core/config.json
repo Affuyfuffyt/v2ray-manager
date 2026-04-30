@@ -28,6 +28,7 @@
   },
   "inbounds": [
     {
+      "tag": "vless_tcp_fallback",
       "port": 8100,
       "listen": "0.0.0.0",
       "protocol": "vless",
@@ -54,6 +55,7 @@
       }
     },
     {
+      "tag": "vless",
       "port": 8101,
       "listen": "127.0.0.1",
       "protocol": "vless",
@@ -69,6 +71,7 @@
       }
     },
     {
+      "tag": "vmess",
       "port": 8102,
       "listen": "127.0.0.1",
       "protocol": "vmess",
@@ -83,6 +86,7 @@
       }
     },
     {
+      "tag": "trojan",
       "port": 8103,
       "listen": "127.0.0.1",
       "protocol": "trojan",
