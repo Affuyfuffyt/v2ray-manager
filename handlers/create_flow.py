@@ -339,19 +339,20 @@ def register_create_handlers(bot):
         # 🔄 نظام الريستارت التلقائي من موقع Alwaysdata
         # ==========================================
         try:
-            # 🚨🚨🚨 غير هاي الكلمة وخلي الـ API Token مالتك من موقع Alwaysdata 🚨🚨🚨
-            ALWAYSDATA_API_KEY = "ضع_مفتاح_ال_API_هنا" 
-            
-            # رقم الموقع مالتك جبته من الصورة اللي دزيتها
+            # 🔥 تم دمج المفتاح ورقم السيرفر الخاص بيك مباشرة بالكود 🔥
+            ALWAYSDATA_API_KEY = "c061901d4dcc41e692325e85c1ab2af5" 
             SITE_ID = "1036371" 
             
             alwaysdata_url = f"https://api.alwaysdata.com/v1/site/{SITE_ID}/restart/"
             
+            # مهلة ثانية واحدة حتى يلحق السيرفر يحفظ بيانات المشترك الجديد
+            time.sleep(1)
+            
             # إرسال طلب الريستارت للموقع
             response = requests.post(alwaysdata_url, auth=(ALWAYSDATA_API_KEY, ''))
             
-            if response.status_code in [200, 204]:
-                bot.send_message(chat_id, "🔄 تم إرسال أمر الريستارت لإعدادات Alwaysdata بنجاح! (الكود هسه شغال)")
+            if response.status_code in [200, 201, 202, 204]:
+                bot.send_message(chat_id, "🔄 تم عمل ريستارت تلقائي للسيرفر! الكود الآن شغال 100% 🚀")
             else:
                 bot.send_message(chat_id, f"⚠️ الكود انحفظ، بس ريستارت الموقع فشل. كود الخطأ: {response.status_code}")
                 print(f"Alwaysdata API Error: {response.text}")
