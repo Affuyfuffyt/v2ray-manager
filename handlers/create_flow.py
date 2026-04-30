@@ -6,44 +6,64 @@ import json
 import base64
 import time 
 import requests 
-import threading # 👈 لعملية العداد التنازلي بالخلفية
+import threading 
 import os 
 
 # قاموس لحفظ بيانات الإنشاء المؤقتة قبل إرسالها للسيرفر
 creation_data = {}
 
 # ==========================================
-# ⏱️ دالة العداد التنازلي لطرد المشترك (المحدثة جذرياً)
+# ⏱️ دالة العداد التنازلي (مع الحذف الفعلي من ملف config.json)
 # ==========================================
 def auto_restart_on_expiry(bot, chat_id, expiry_time, user_name, uuid_val, protocol):
     wait_seconds = expiry_time - time.time()
     
     if wait_seconds > 0:
-        # البوت ينام بالخلفية هنا لحد ما يخلص وقت المشترك بالثانية
         time.sleep(wait_seconds) 
         
-    # 🚨 انتهى الوقت! الآن (نحذف المشترك) ثم (نضرب ريستارت) حتى لا يعيد الاتصال
+    # 🚨 انتهى الوقت!
     
-    # 1. محاولة حذف المشترك من محرك Xray والكونفك
+    # 1. نحذفه من الـ API وقاعدة البيانات (مثل ما جانت)
     try:
         from xray_core.panel_api import PanelAPI
         local_api = PanelAPI()
+        try: local_api.delete_client(user_name)
+        except: pass
+        try: local_api.remove_client(uuid_val)
+        except: pass
+    except: pass
+    
+    # 2. 🔥 الضربة القاضية: نحذفه من ملف config.json يدوياً 🔥
+    try:
+        home_dir = os.path.expanduser("~")
+        config_path = f"{home_dir}/xray_core/config.json"
         
-        # نحاول نحذفه باستخدام الدوال البرمجية الشائعة بالأداة مالتك
-        try:
-            local_api.delete_client(user_name)
-        except:
-            pass
-            
-        try:
-            local_api.remove_client(uuid_val)
-        except:
-            pass
-            
+        if os.path.exists(config_path):
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config_data = json.load(f)
+                
+            modified = False
+            # نبحث بداخل إعدادات Xray عن المشترك ونحذفه
+            if "inbounds" in config_data:
+                for inbound in config_data["inbounds"]:
+                    if "settings" in inbound and "clients" in inbound["settings"]:
+                        original_clients = inbound["settings"]["clients"]
+                        # فلترة: نحتفظ بكل المشتركين ما عدا اللي انتهى وقته
+                        new_clients = [c for c in original_clients if c.get("id") != uuid_val and c.get("password") != uuid_val]
+                        
+                        if len(original_clients) != len(new_clients):
+                            inbound["settings"]["clients"] = new_clients
+                            modified = True
+                            
+            # إذا حذفيناه، نرجع نحفظ الملف من جديد
+            if modified:
+                with open(config_path, 'w', encoding='utf-8') as f:
+                    json.dump(config_data, f, indent=4)
+                print(f"تم مسح {user_name} من ملف config.json بنجاح!")
     except Exception as e:
-        print(f"Error removing client: {e}")
+        print(f"خطأ في مسح المشترك من ملف الكونفك: {e}")
         
-    # 2. الآن نضرب الريستارت حتى نقطع الاتصال المفتوح
+    # 3. نضرب الريستارت حتى Xray يقرا الملف الجديد اللي انحذف منه المشترك
     try:
         home_dir = os.path.expanduser("~")
         key_file = f"{home_dir}/alwaysdata_keys.txt"
@@ -324,7 +344,7 @@ def register_create_handlers(bot):
         except Exception as e:
             print(f"Error saving to DB: {e}")
 
-        # 🔥 إطلاق العداد التنازلي للريستارت بالخلفية وتمرير البيانات اللازمة للفصل 🔥
+        # 🔥 إطلاق العداد التنازلي للريستارت بالخلفية لغرض فصل المشترك لاحقاً 🔥
         threading.Thread(
             target=auto_restart_on_expiry, 
             args=(bot, chat_id, expiry_time, data['name'], data['uuid'], protocol), 
