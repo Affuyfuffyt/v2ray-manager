@@ -238,8 +238,8 @@ def register_create_handlers(bot):
         data = creation_data[chat_id]
         protocol = data.get('protocol', 'vless').lower()
 
-        # === التحديث الأصلي: تحديد المسار الذكي حسب البروتوكول ===
-        fixed_path = f"/Telegram-@338888-{protocol}"
+        # === التحديث الأصلي: المسار الثابت الصحيح ===
+        fixed_path = "/Telegram-@338888"
         data['path'] = fixed_path
 
         # === حساب وقت الانتهاء بالثانية (Timestamp) ===
@@ -248,12 +248,11 @@ def register_create_handlers(bot):
         elif dur_str.endswith('h'): sec = int(dur_str[:-1]) * 3600
         elif dur_str.endswith('d'): sec = int(dur_str[:-1]) * 86400
         elif dur_str.endswith('y'): sec = int(dur_str[:-1]) * 86400 * 365
-        else: sec = int(dur_str) * 86400 # افتراضي أيام في حال إدخال رقم فقط
+        else: sec = int(dur_str) * 86400 
         
-        # الوقت الحالي + الثواني المطلوبة
         expiry_time = time.time() + sec
 
-        # إضافة المشترك للسيرفر الفعلي وإرسال نوع البروتوكول للفرز
+        # إضافة المشترك للسيرفر الفعلي
         try:
             from xray_core.panel_api import PanelAPI
             local_api = PanelAPI()
@@ -261,10 +260,9 @@ def register_create_handlers(bot):
         except Exception as e:
             print(f"Error connecting to local API: {e}")
 
-        # === حفظ المشترك وسعته ووقت انتهائه في قاعدة البيانات ===
+        # === حفظ المشترك بالداتا بيس ===
         try:
             from database import save_user
-            # نرسل الـ expiry_time للداتا بيس
             save_user(data['name'], data['uuid'], data['quota_bytes'], expiry_time)
         except Exception as e:
             print(f"Error saving to DB: {e}")
@@ -272,7 +270,7 @@ def register_create_handlers(bot):
         selected_port = data.get('port', 443)
         host_domain = "wathfor.alwaysdata.net"
         
-        # إعدادات الأمان حسب البورت
+        # إعدادات الأمان
         if selected_port == 443:
             security_type = "tls"
             sni_param = host_domain
@@ -282,13 +280,11 @@ def register_create_handlers(bot):
             sni_param = ""
             sni_str = ""
 
-        # توليد الرابط حسب البروتوكول المختار مع إجبار المسار الذكي
+        # توليد الرابط
         if protocol == "vless":
             final_link = f"vless://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={fixed_path}{sni_str}#{data['name']}"
-            
         elif protocol == "trojan":
             final_link = f"trojan://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={fixed_path}{sni_str}#{data['name']}"
-            
         elif protocol == "vmess":
             vmess_dict = {
                 "v": "2",
@@ -336,20 +332,20 @@ def register_create_handlers(bot):
         creation_data.pop(chat_id, None)
 
         # ==========================================
-        # 🔄 نظام الريستارت التلقائي من موقع Alwaysdata
+        # 🔥 التحديث الذكي للريستارت: السحب التلقائي من التيرمكس
         # ==========================================
         try:
-            # 🔥 تم دمج المفتاح ورقم السيرفر الخاص بيك مباشرة بالكود 🔥
-            ALWAYSDATA_API_KEY = "c061901d4dcc41e692325e85c1ab2af5" 
-            SITE_ID = "1036371" 
+            import config # 👈 نستدعي الكونفك اللي سويته أنت بالتيرمكس
+            import requests
             
-            alwaysdata_url = f"https://api.alwaysdata.com/v1/site/{SITE_ID}/restart/"
+            # هسه البوت راح يقرا الأرقام الخاصة بكل سيرفر تلقائياً من الإعدادات
+            alwaysdata_url = f"https://api.alwaysdata.com/v1/site/{config.SITE_ID}/restart/"
             
-            # مهلة ثانية واحدة حتى يلحق السيرفر يحفظ بيانات المشترك الجديد
+            # مهلة ثانية واحدة قبل الريستارت
             time.sleep(1)
             
-            # إرسال طلب الريستارت للموقع
-            response = requests.post(alwaysdata_url, auth=(ALWAYSDATA_API_KEY, ''))
+            # نرسل طلب الريستارت بالمفتاح المخزون بالتيرمكس
+            response = requests.post(alwaysdata_url, auth=(config.ALWAYSDATA_API_KEY, ''))
             
             if response.status_code in [200, 201, 202, 204]:
                 bot.send_message(chat_id, "🔄 تم عمل ريستارت تلقائي للسيرفر! الكود الآن شغال 100% 🚀")
@@ -358,5 +354,5 @@ def register_create_handlers(bot):
                 print(f"Alwaysdata API Error: {response.text}")
                 
         except Exception as e:
-            bot.send_message(chat_id, "⚠️ الكود انحفظ، بس صار خلل بالاتصال وي موقع Alwaysdata.")
+            bot.send_message(chat_id, "⚠️ الكود انحفظ، بس صار خلل. تأكد من صحة إدخال الـ API والـ Site ID بالتيرمكس.")
             print(f"Alwaysdata Request Error: {e}")
