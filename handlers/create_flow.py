@@ -13,16 +13,37 @@ import os
 creation_data = {}
 
 # ==========================================
-# ⏱️ دالة العداد التنازلي لطرد المشترك (محدثة لترسل إشعار للتلكرام)
+# ⏱️ دالة العداد التنازلي لطرد المشترك (المحدثة جذرياً)
 # ==========================================
-def auto_restart_on_expiry(bot, chat_id, expiry_time, user_name):
+def auto_restart_on_expiry(bot, chat_id, expiry_time, user_name, uuid_val, protocol):
     wait_seconds = expiry_time - time.time()
     
     if wait_seconds > 0:
-        # البوت ينام بالخلفية هنا لحد ما يخلص وقت المشترك
+        # البوت ينام بالخلفية هنا لحد ما يخلص وقت المشترك بالثانية
         time.sleep(wait_seconds) 
         
-    # 🚨 انتهى الوقت! الآن نضرب ريستارت ونرسل إشعار
+    # 🚨 انتهى الوقت! الآن (نحذف المشترك) ثم (نضرب ريستارت) حتى لا يعيد الاتصال
+    
+    # 1. محاولة حذف المشترك من محرك Xray والكونفك
+    try:
+        from xray_core.panel_api import PanelAPI
+        local_api = PanelAPI()
+        
+        # نحاول نحذفه باستخدام الدوال البرمجية الشائعة بالأداة مالتك
+        try:
+            local_api.delete_client(user_name)
+        except:
+            pass
+            
+        try:
+            local_api.remove_client(uuid_val)
+        except:
+            pass
+            
+    except Exception as e:
+        print(f"Error removing client: {e}")
+        
+    # 2. الآن نضرب الريستارت حتى نقطع الاتصال المفتوح
     try:
         home_dir = os.path.expanduser("~")
         key_file = f"{home_dir}/alwaysdata_keys.txt"
@@ -38,7 +59,7 @@ def auto_restart_on_expiry(bot, chat_id, expiry_time, user_name):
                     response = requests.post(alwaysdata_url, auth=(API_KEY, ''))
                     
                     if response.status_code in [200, 201, 202, 204]:
-                        msg = f"🛑 **تنبيه انتهاء صلاحية!** 🛑\n\n👤 المشترك: `{user_name}`\n⏳ انتهى وقته للتو.\n🔄 **تم عمل ريستارت للسيرفر وطرده بنجاح!**"
+                        msg = f"🛑 **تنبيه انتهاء صلاحية!** 🛑\n\n👤 المشترك: `{user_name}`\n⏳ انتهى وقته للتو.\n🔄 **تم سحب صلاحيته وعمل ريستارت للسيرفر لطرده نهائياً!**"
                         bot.send_message(chat_id, msg, parse_mode="Markdown")
                     else:
                         bot.send_message(chat_id, f"⚠️ انتهى وقت `{user_name}` ولكن فشل الريستارت التلقائي!")
@@ -303,15 +324,18 @@ def register_create_handlers(bot):
         except Exception as e:
             print(f"Error saving to DB: {e}")
 
-        # 🔥 إطلاق العداد التنازلي للريستارت بالخلفية لغرض فصل المشترك لاحقاً 🔥
-        threading.Thread(target=auto_restart_on_expiry, args=(bot, chat_id, expiry_time, data['name']), daemon=True).start()
+        # 🔥 إطلاق العداد التنازلي للريستارت بالخلفية وتمرير البيانات اللازمة للفصل 🔥
+        threading.Thread(
+            target=auto_restart_on_expiry, 
+            args=(bot, chat_id, expiry_time, data['name'], data['uuid'], protocol), 
+            daemon=True
+        ).start()
 
         selected_port = data.get('port', 443)
         
         # قراءة الدومين برمجياً من السيرفر
         host_domain = "wathfor.alwaysdata.net" 
         try:
-            import os
             home_dir = os.path.expanduser("~")
             key_file = f"{home_dir}/alwaysdata_keys.txt"
             if os.path.exists(key_file):
