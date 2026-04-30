@@ -238,8 +238,8 @@ def register_create_handlers(bot):
         data = creation_data[chat_id]
         protocol = data.get('protocol', 'vless').lower()
 
-        # === المسار الأصلي المضبوط ===
-        fixed_path = f"/Telegram-@338888-{protocol}"
+        # === التحديث الأصلي: المسار الثابت الصحيح ===
+        fixed_path = "/Telegram-@338888"
         data['path'] = fixed_path
 
         # === حساب وقت الانتهاء بالثانية (Timestamp) ===
@@ -252,7 +252,7 @@ def register_create_handlers(bot):
         
         expiry_time = time.time() + sec
 
-        # إضافة المشترك للسيرفر الفعلي وإرسال نوع البروتوكول للفرز
+        # إضافة المشترك للسيرفر الفعلي
         try:
             from xray_core.panel_api import PanelAPI
             local_api = PanelAPI()
@@ -260,17 +260,19 @@ def register_create_handlers(bot):
         except Exception as e:
             print(f"Error connecting to local API: {e}")
 
-        # === حفظ المشترك وسعته ووقت انتهائه في قاعدة البيانات ===
+        # === حفظ المشترك بالداتا بيس ===
         try:
             from database import save_user
             save_user(data['name'], data['uuid'], data['quota_bytes'], expiry_time)
         except Exception as e:
             print(f"Error saving to DB: {e}")
 
+        # ⚠️ ملاحظة: دومين الاتصال هنا مثبت على wathfor.alwaysdata.net
+        # إذا تسوي سيرفر جديد لازم تغيره أو تخليه يستورده من الكونفك مستقبلاً
         selected_port = data.get('port', 443)
         host_domain = "wathfor.alwaysdata.net"
         
-        # إعدادات الأمان حسب البورت
+        # إعدادات الأمان
         if selected_port == 443:
             security_type = "tls"
             sni_param = host_domain
@@ -280,13 +282,11 @@ def register_create_handlers(bot):
             sni_param = ""
             sni_str = ""
 
-        # توليد الرابط حسب البروتوكول المختار
+        # توليد الرابط
         if protocol == "vless":
             final_link = f"vless://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={fixed_path}{sni_str}#{data['name']}"
-            
         elif protocol == "trojan":
             final_link = f"trojan://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={fixed_path}{sni_str}#{data['name']}"
-            
         elif protocol == "vmess":
             vmess_dict = {
                 "v": "2",
@@ -340,8 +340,9 @@ def register_create_handlers(bot):
             import os
             import requests
             
-            # مسار الملف اللي راح تقراه الأداة (هذا الملف مخفي وموجود بس بالسيرفر)
-            key_file = "/home/wathfor/alwaysdata_keys.txt"
+            # جلب المسار الرئيسي للسيرفر تلقائياً (حتى يشتغل على أي استضافة)
+            home_dir = os.path.expanduser("~")
+            key_file = f"{home_dir}/alwaysdata_keys.txt"
             
             if os.path.exists(key_file):
                 with open(key_file, 'r') as f:
