@@ -13,7 +13,7 @@ read -p "🔑 أدخل توكن البوت: " BOT_TOKEN
 read -p "👑 أدخل الآيدي الخاص بك: " ADMIN_ID
 read -p "🛠️ أدخل Alwaysdata API Key: " AD_API_KEY
 read -p "🆔 أدخل Site ID الخاص بك: " AD_SITE_ID
-read -p "🌐 أدخل الدومين الخاص بك (مثال: wathfor.alwaysdata.net): " AD_DOMAIN
+read -p "🌐 أدخل الدومين الخاص بك (مثال: google.com): " AD_DOMAIN
 
 # 3. تجهيز المجلدات
 WORK_DIR="$HOME/v2ray_manager"
