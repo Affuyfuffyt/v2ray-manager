@@ -238,8 +238,8 @@ def register_create_handlers(bot):
         data = creation_data[chat_id]
         protocol = data.get('protocol', 'vless').lower()
 
-        # === التحديث الأصلي: المسار الثابت الصحيح ===
-        fixed_path = "/Telegram-@338888"
+        # === المسار الأصلي المضبوط ===
+        fixed_path = f"/Telegram-@338888-{protocol}"
         data['path'] = fixed_path
 
         # === حساب وقت الانتهاء بالثانية (Timestamp) ===
@@ -252,7 +252,7 @@ def register_create_handlers(bot):
         
         expiry_time = time.time() + sec
 
-        # إضافة المشترك للسيرفر الفعلي
+        # إضافة المشترك للسيرفر الفعلي وإرسال نوع البروتوكول للفرز
         try:
             from xray_core.panel_api import PanelAPI
             local_api = PanelAPI()
@@ -260,7 +260,7 @@ def register_create_handlers(bot):
         except Exception as e:
             print(f"Error connecting to local API: {e}")
 
-        # === حفظ المشترك بالداتا بيس ===
+        # === حفظ المشترك وسعته ووقت انتهائه في قاعدة البيانات ===
         try:
             from database import save_user
             save_user(data['name'], data['uuid'], data['quota_bytes'], expiry_time)
@@ -270,7 +270,7 @@ def register_create_handlers(bot):
         selected_port = data.get('port', 443)
         host_domain = "wathfor.alwaysdata.net"
         
-        # إعدادات الأمان
+        # إعدادات الأمان حسب البورت
         if selected_port == 443:
             security_type = "tls"
             sni_param = host_domain
@@ -280,11 +280,13 @@ def register_create_handlers(bot):
             sni_param = ""
             sni_str = ""
 
-        # توليد الرابط
+        # توليد الرابط حسب البروتوكول المختار
         if protocol == "vless":
             final_link = f"vless://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={fixed_path}{sni_str}#{data['name']}"
+            
         elif protocol == "trojan":
             final_link = f"trojan://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={fixed_path}{sni_str}#{data['name']}"
+            
         elif protocol == "vmess":
             vmess_dict = {
                 "v": "2",
@@ -332,27 +334,35 @@ def register_create_handlers(bot):
         creation_data.pop(chat_id, None)
 
         # ==========================================
-        # 🔥 التحديث الذكي للريستارت: السحب التلقائي من التيرمكس
+        # 🔄 نظام الريستارت الذكي المستقل (من ملف نصي بالسيرفر فقط)
         # ==========================================
         try:
-            import config # 👈 نستدعي الكونفك اللي سويته أنت بالتيرمكس
+            import os
             import requests
             
-            # هسه البوت راح يقرا الأرقام الخاصة بكل سيرفر تلقائياً من الإعدادات
-            alwaysdata_url = f"https://api.alwaysdata.com/v1/site/{config.SITE_ID}/restart/"
+            # مسار الملف اللي راح تقراه الأداة (هذا الملف مخفي وموجود بس بالسيرفر)
+            key_file = "/home/wathfor/alwaysdata_keys.txt"
             
-            # مهلة ثانية واحدة قبل الريستارت
-            time.sleep(1)
-            
-            # نرسل طلب الريستارت بالمفتاح المخزون بالتيرمكس
-            response = requests.post(alwaysdata_url, auth=(config.ALWAYSDATA_API_KEY, ''))
-            
-            if response.status_code in [200, 201, 202, 204]:
-                bot.send_message(chat_id, "🔄 تم عمل ريستارت تلقائي للسيرفر! الكود الآن شغال 100% 🚀")
+            if os.path.exists(key_file):
+                with open(key_file, 'r') as f:
+                    lines = f.read().strip().split('\n')
+                    if len(lines) >= 2:
+                        SITE_ID = lines[0].strip()
+                        API_KEY = lines[1].strip()
+                        
+                        alwaysdata_url = f"https://api.alwaysdata.com/v1/site/{SITE_ID}/restart/"
+                        time.sleep(1)
+                        response = requests.post(alwaysdata_url, auth=(API_KEY, ''))
+                        
+                        if response.status_code in [200, 201, 202, 204]:
+                            bot.send_message(chat_id, "🔄 تم الريستارت التلقائي للسيرفر بنجاح! 🚀 الكود هسه شغال.")
+                        else:
+                            bot.send_message(chat_id, f"⚠️ الكود انحفظ، بس فشل الريستارت التلقائي. كود الخطأ: {response.status_code}")
+                    else:
+                        bot.send_message(chat_id, "⚠️ ملف alwaysdata_keys.txt ناقص بيانات (يحتاج Site ID و API Key).")
             else:
-                bot.send_message(chat_id, f"⚠️ الكود انحفظ، بس ريستارت الموقع فشل. كود الخطأ: {response.status_code}")
-                print(f"Alwaysdata API Error: {response.text}")
+                bot.send_message(chat_id, "⚠️ لم يتم العثور على ملف alwaysdata_keys.txt في السيرفر لعمل ريستارت تلقائي.")
                 
         except Exception as e:
-            bot.send_message(chat_id, "⚠️ الكود انحفظ، بس صار خلل. تأكد من صحة إدخال الـ API والـ Site ID بالتيرمكس.")
+            bot.send_message(chat_id, "⚠️ صار خلل اثناء محاولة الريستارت.")
             print(f"Alwaysdata Request Error: {e}")
