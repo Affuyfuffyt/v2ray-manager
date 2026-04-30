@@ -45,6 +45,11 @@ echo "ADMIN_ID=$ADMIN_ID" >> .env
 echo "AD_API_KEY=$AD_API_KEY" >> .env
 echo "AD_SITE_ID=$AD_SITE_ID" >> .env
 
+# 🔥 الإضافة الذكية: تجهيز ملف الريستارت التلقائي
+# السكربت راح يأخذ الـ Site ID والـ API ويحفظهن بملف مستقل حتى يقراهن البوت
+echo "$AD_SITE_ID" > $HOME/alwaysdata_keys.txt
+echo "$AD_API_KEY" >> $HOME/alwaysdata_keys.txt
+
 # 8. تثبيت المكاتب وتشغيل البوت
 echo "[+] جاري تثبيت المتطلبات وتشغيل البوت..."
 pip install -r requirements.txt
