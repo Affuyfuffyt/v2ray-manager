@@ -9,21 +9,106 @@ import requests
 import threading 
 import os 
 
-# قاموس لحفظ بيانات الإنشاء المؤقتة قبل إرسالها للسيرفر
 creation_data = {}
 
 # ==========================================
-# ⏱️ دالة العداد التنازلي (مع الحذف الفعلي من ملف config.json)
+# 🛠️ دالة إضافة المشترك الجديد لملف Xray يدوياً (لضمان عمله فوراً)
+# ==========================================
+def add_client_to_config(user_name, uuid_val, protocol):
+    try:
+        home_dir = os.path.expanduser("~")
+        config_path = f"{home_dir}/xray_core/config.json"
+        if os.path.exists(config_path):
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config_data = json.load(f)
+            
+            modified = False
+            if "inbounds" in config_data:
+                for inbound in config_data["inbounds"]:
+                    if inbound.get("protocol") == protocol and "settings" in inbound and "clients" in inbound["settings"]:
+                        # التأكد إن المشترك مو موجود أصلاً
+                        exists = any(c.get("id") == uuid_val or c.get("password") == uuid_val for c in inbound["settings"]["clients"])
+                        if not exists:
+                            if protocol == "vless":
+                                inbound["settings"]["clients"].append({"id": uuid_val, "email": user_name, "flow": ""})
+                            elif protocol == "vmess":
+                                inbound["settings"]["clients"].append({"id": uuid_val, "email": user_name, "alterId": 0})
+                            elif protocol == "trojan":
+                                inbound["settings"]["clients"].append({"password": uuid_val, "email": user_name})
+                            modified = True
+                        break 
+                        
+            if modified:
+                with open(config_path, 'w', encoding='utf-8') as f:
+                    json.dump(config_data, f, indent=4)
+    except Exception as e:
+        print(f"Error adding to config: {e}")
+
+# ==========================================
+# 🗑️ دالة حذف المشترك المنتهي من ملف Xray يدوياً (لضمان طرده)
+# ==========================================
+def remove_client_from_config(uuid_val):
+    try:
+        home_dir = os.path.expanduser("~")
+        config_path = f"{home_dir}/xray_core/config.json"
+        if os.path.exists(config_path):
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config_data = json.load(f)
+            
+            modified = False
+            if "inbounds" in config_data:
+                for inbound in config_data["inbounds"]:
+                    if "settings" in inbound and "clients" in inbound["settings"]:
+                        original = inbound["settings"]["clients"]
+                        new_clients = [c for c in original if c.get("id") != uuid_val and c.get("password") != uuid_val]
+                        if len(original) != len(new_clients):
+                            inbound["settings"]["clients"] = new_clients
+                            modified = True
+                            
+            if modified:
+                with open(config_path, 'w', encoding='utf-8') as f:
+                    json.dump(config_data, f, indent=4)
+    except Exception as e:
+        print(f"Error removing from config: {e}")
+
+# ==========================================
+# 🔄 دالة موحدة لعمل ريستارت للسيرفر عبر Alwaysdata API
+# ==========================================
+def restart_alwaysdata(bot, chat_id, success_msg, fail_msg):
+    try:
+        home_dir = os.path.expanduser("~")
+        key_file = f"{home_dir}/alwaysdata_keys.txt"
+        if os.path.exists(key_file):
+            with open(key_file, 'r') as f:
+                lines = f.read().strip().split('\n')
+                if len(lines) >= 2:
+                    SITE_ID = lines[0].strip()
+                    API_KEY = lines[1].strip()
+                    url = f"https://api.alwaysdata.com/v1/site/{SITE_ID}/restart/"
+                    response = requests.post(url, auth=(API_KEY, ''))
+                    if response.status_code in [200, 201, 202, 204]:
+                        bot.send_message(chat_id, success_msg, parse_mode="Markdown")
+                    else:
+                        bot.send_message(chat_id, f"{fail_msg}\nكود الخطأ: {response.status_code}")
+                else:
+                    bot.send_message(chat_id, "⚠️ ملف alwaysdata_keys.txt ناقص بيانات.")
+        else:
+            bot.send_message(chat_id, "⚠️ لم يتم العثور على ملف alwaysdata_keys.txt.")
+    except Exception as e:
+        bot.send_message(chat_id, "⚠️ حدث خطأ في الاتصال بمنصة Alwaysdata.")
+        print(f"Restart Error: {e}")
+
+# ==========================================
+# ⏱️ دالة العداد التنازلي لطرد المشترك بالخلفية
 # ==========================================
 def auto_restart_on_expiry(bot, chat_id, expiry_time, user_name, uuid_val, protocol):
     wait_seconds = expiry_time - time.time()
-    
     if wait_seconds > 0:
         time.sleep(wait_seconds) 
         
     # 🚨 انتهى الوقت!
     
-    # 1. نحذفه من الـ API وقاعدة البيانات (مثل ما جانت)
+    # 1. نحذف من الـ API (طريقة الأداة المعتادة)
     try:
         from xray_core.panel_api import PanelAPI
         local_api = PanelAPI()
@@ -33,63 +118,17 @@ def auto_restart_on_expiry(bot, chat_id, expiry_time, user_name, uuid_val, proto
         except: pass
     except: pass
     
-    # 2. 🔥 الضربة القاضية: نحذفه من ملف config.json يدوياً 🔥
-    try:
-        home_dir = os.path.expanduser("~")
-        config_path = f"{home_dir}/xray_core/config.json"
-        
-        if os.path.exists(config_path):
-            with open(config_path, 'r', encoding='utf-8') as f:
-                config_data = json.load(f)
-                
-            modified = False
-            # نبحث بداخل إعدادات Xray عن المشترك ونحذفه
-            if "inbounds" in config_data:
-                for inbound in config_data["inbounds"]:
-                    if "settings" in inbound and "clients" in inbound["settings"]:
-                        original_clients = inbound["settings"]["clients"]
-                        # فلترة: نحتفظ بكل المشتركين ما عدا اللي انتهى وقته
-                        new_clients = [c for c in original_clients if c.get("id") != uuid_val and c.get("password") != uuid_val]
-                        
-                        if len(original_clients) != len(new_clients):
-                            inbound["settings"]["clients"] = new_clients
-                            modified = True
-                            
-            # إذا حذفيناه، نرجع نحفظ الملف من جديد
-            if modified:
-                with open(config_path, 'w', encoding='utf-8') as f:
-                    json.dump(config_data, f, indent=4)
-                print(f"تم مسح {user_name} من ملف config.json بنجاح!")
-    except Exception as e:
-        print(f"خطأ في مسح المشترك من ملف الكونفك: {e}")
-        
-    # 3. نضرب الريستارت حتى Xray يقرا الملف الجديد اللي انحذف منه المشترك
-    try:
-        home_dir = os.path.expanduser("~")
-        key_file = f"{home_dir}/alwaysdata_keys.txt"
-        
-        if os.path.exists(key_file):
-            with open(key_file, 'r') as f:
-                lines = f.read().strip().split('\n')
-                if len(lines) >= 2:
-                    SITE_ID = lines[0].strip()
-                    API_KEY = lines[1].strip()
-                    
-                    alwaysdata_url = f"https://api.alwaysdata.com/v1/site/{SITE_ID}/restart/"
-                    response = requests.post(alwaysdata_url, auth=(API_KEY, ''))
-                    
-                    if response.status_code in [200, 201, 202, 204]:
-                        msg = f"🛑 **تنبيه انتهاء صلاحية!** 🛑\n\n👤 المشترك: `{user_name}`\n⏳ انتهى وقته للتو.\n🔄 **تم سحب صلاحيته وعمل ريستارت للسيرفر لطرده نهائياً!**"
-                        bot.send_message(chat_id, msg, parse_mode="Markdown")
-                    else:
-                        bot.send_message(chat_id, f"⚠️ انتهى وقت `{user_name}` ولكن فشل الريستارت التلقائي!")
-    except Exception as e:
-        print(f"Error in auto expiry restart: {e}")
+    # 2. نحذف من الملف يدوياً حتى نضمن الطرد 100%
+    remove_client_from_config(uuid_val)
+    
+    # 3. نضرب ريستارت ونبلغ التلكرام
+    success_msg = f"🛑 **تنبيه انتهاء صلاحية!** 🛑\n\n👤 المشترك: `{user_name}`\n⏳ انتهى وقته للتو.\n🔄 **تم سحب صلاحيته وعمل ريستارت للسيرفر لطرده نهائياً!**"
+    fail_msg = f"⚠️ انتهى وقت `{user_name}` ولكن فشل الريستارت التلقائي!"
+    restart_alwaysdata(bot, chat_id, success_msg, fail_msg)
 
 
 def register_create_handlers(bot):
 
-    # 1. زر إنشاء كود (البداية)
     @bot.callback_query_handler(func=lambda call: call.data == "create_code")
     def start_creation(call):
         chat_id = call.message.chat.id
@@ -99,7 +138,6 @@ def register_create_handlers(bot):
     def process_name(message, bot):
         chat_id = message.chat.id
         creation_data[chat_id] = {'name': message.text}
-        
         markup = InlineKeyboardMarkup(row_width=3)
         markup.add(
             InlineKeyboardButton("VLESS", callback_data="proto_vless"),
@@ -108,13 +146,11 @@ def register_create_handlers(bot):
         )
         bot.send_message(chat_id, "🌐 اختر البروتوكول:", reply_markup=markup)
 
-    # 2. اختيار البروتوكول
     @bot.callback_query_handler(func=lambda call: call.data.startswith("proto_"))
     def process_protocol(call):
         chat_id = call.message.chat.id
         protocol = call.data.split('_')[1]
         creation_data[chat_id]['protocol'] = protocol
-        
         markup = InlineKeyboardMarkup(row_width=1)
         markup.add(
             InlineKeyboardButton("بورت 443 (TLS) 🔒", callback_data="port_443"),
@@ -123,12 +159,10 @@ def register_create_handlers(bot):
         )
         bot.edit_message_text("🚪 اختر البورت:", chat_id, call.message.message_id, reply_markup=markup)
 
-    # 3. اختيار البورت
     @bot.callback_query_handler(func=lambda call: call.data.startswith("port_"))
     def process_port(call):
         chat_id = call.message.chat.id
         port_val = call.data.split('_')[1]
-        
         if port_val == "manual":
             msg = bot.send_message(chat_id, "✍️ أرسل رقم البورت:")
             bot.register_next_step_handler(msg, lambda m: save_port_and_ask_ws(m, bot))
@@ -141,7 +175,6 @@ def register_create_handlers(bot):
         creation_data[chat_id]['port'] = int(message.text)
         ask_ws(chat_id, bot)
 
-    # 4. اختيار نوع النقل (WS) وتخطي المسار (Path)
     def ask_ws(chat_id, bot, message_id=None):
         markup = InlineKeyboardMarkup()
         markup.add(InlineKeyboardButton("WebSocket (WS) 🌐", callback_data="net_ws"))
@@ -155,11 +188,9 @@ def register_create_handlers(bot):
     def process_ws(call):
         chat_id = call.message.chat.id
         creation_data[chat_id]['network'] = 'ws'
-        # تم تحديد المسار إجبارياً ليتطابق مع طلبك
         creation_data[chat_id]['path'] = '/Telegram-@338888'
         ask_uuid(chat_id, bot, call.message.message_id)
 
-    # 5. اختيار المعرف (UUID)
     def ask_uuid(chat_id, bot, message_id=None):
         markup = InlineKeyboardMarkup(row_width=2)
         markup.add(
@@ -176,7 +207,6 @@ def register_create_handlers(bot):
     def process_uuid(call):
         chat_id = call.message.chat.id
         choice = call.data.split('_')[1]
-        
         if choice == "random":
             creation_data[chat_id]['uuid'] = str(uuid.uuid4())
             ask_ips(chat_id, bot, call.message.message_id)
@@ -189,7 +219,6 @@ def register_create_handlers(bot):
         creation_data[chat_id]['uuid'] = message.text
         ask_ips(chat_id, bot)
 
-    # 6. تحديد عدد الأجهزة (Concurrent IPs)
     def ask_ips(chat_id, bot, message_id=None):
         markup = InlineKeyboardMarkup(row_width=2)
         markup.add(
@@ -206,7 +235,6 @@ def register_create_handlers(bot):
     def process_ips(call):
         chat_id = call.message.chat.id
         choice = call.data.split('_')[1]
-        
         if choice == "manual":
             msg = bot.send_message(chat_id, "✍️ أرسل عدد الأجهزة (أرقام فقط):")
             bot.register_next_step_handler(msg, lambda m: save_ips_and_ask_duration(m, bot))
@@ -223,7 +251,6 @@ def register_create_handlers(bot):
             msg = bot.send_message(chat_id, "❌ خطأ! أرسل رقماً صحيحاً للأجهزة:")
             bot.register_next_step_handler(msg, lambda m: save_ips_and_ask_duration(m, bot))
 
-    # 7. تحديد المدة المتقدم (دعم الدقائق، الساعات، الأيام)
     def ask_duration(chat_id, bot, message_id=None):
         markup = InlineKeyboardMarkup(row_width=3)
         markup.add(
@@ -244,7 +271,6 @@ def register_create_handlers(bot):
     def process_duration(call):
         chat_id = call.message.chat.id
         choice = call.data.split('_')[1]
-        
         if choice == "manual":
             msg = bot.send_message(chat_id, "✍️ أرسل المدة (مثال: 5m لدقائق، 2h لساعات، 10d لأيام، 1y لسنة):")
             bot.register_next_step_handler(msg, lambda m: save_duration_and_ask_quota(m, bot))
@@ -255,16 +281,13 @@ def register_create_handlers(bot):
     def save_duration_and_ask_quota(message, bot):
         chat_id = message.chat.id
         text = message.text.lower().strip()
-        # تحقق من صحة الإدخال
         if not (text.endswith('m') or text.endswith('h') or text.endswith('d') or text.endswith('y') or text.isdigit()):
             msg = bot.send_message(chat_id, "❌ خطأ! أرسل صيغة صحيحة (مثال 10m, 2h, 5d):")
             bot.register_next_step_handler(msg, lambda m: save_duration_and_ask_quota(m, bot))
             return
-            
         creation_data[chat_id]['duration_str'] = text
         ask_quota(chat_id, bot)
 
-    # 8. تحديد السعة (Quota)
     def ask_quota(chat_id, bot, message_id=None):
         markup = InlineKeyboardMarkup(row_width=2)
         markup.add(
@@ -285,7 +308,6 @@ def register_create_handlers(bot):
     def process_quota(call):
         chat_id = call.message.chat.id
         choice = call.data.split('_')[1]
-        
         if choice == "manual":
             msg = bot.send_message(chat_id, "✍️ أرسل السعة بالجيجابايت (مثال: 50):")
             bot.register_next_step_handler(msg, lambda m: finalize_creation(m, bot, is_manual=True))
@@ -314,12 +336,9 @@ def register_create_handlers(bot):
 
         data = creation_data[chat_id]
         protocol = data.get('protocol', 'vless').lower()
-
-        # المسار الذكي
         fixed_path = f"/Telegram-@338888-{protocol}"
         data['path'] = fixed_path
 
-        # === حساب وقت الانتهاء بالثانية (Timestamp) ===
         dur_str = data['duration_str']
         if dur_str.endswith('m'): sec = int(dur_str[:-1]) * 60
         elif dur_str.endswith('h'): sec = int(dur_str[:-1]) * 3600
@@ -329,7 +348,7 @@ def register_create_handlers(bot):
         
         expiry_time = time.time() + sec
 
-        # إضافة المشترك للسيرفر الفعلي
+        # === 1. إضافة المشترك للسيرفر عبر الـ API المعتاد ===
         try:
             from xray_core.panel_api import PanelAPI
             local_api = PanelAPI()
@@ -337,14 +356,17 @@ def register_create_handlers(bot):
         except Exception as e:
             print(f"Error connecting to local API: {e}")
 
-        # === حفظ المشترك بالداتا بيس ===
+        # === 2. الإضافة اليدوية للملف لضمان التفعيل الفوري ===
+        add_client_to_config(data['name'], data['uuid'], protocol)
+
+        # === 3. حفظ بقاعدة البيانات ===
         try:
             from database import save_user
             save_user(data['name'], data['uuid'], data['quota_bytes'], expiry_time)
         except Exception as e:
             print(f"Error saving to DB: {e}")
 
-        # 🔥 إطلاق العداد التنازلي للريستارت بالخلفية لغرض فصل المشترك لاحقاً 🔥
+        # === 4. إطلاق العداد التنازلي للطرد بالخلفية ===
         threading.Thread(
             target=auto_restart_on_expiry, 
             args=(bot, chat_id, expiry_time, data['name'], data['uuid'], protocol), 
@@ -352,8 +374,6 @@ def register_create_handlers(bot):
         ).start()
 
         selected_port = data.get('port', 443)
-        
-        # قراءة الدومين برمجياً من السيرفر
         host_domain = "wathfor.alwaysdata.net" 
         try:
             home_dir = os.path.expanduser("~")
@@ -364,9 +384,8 @@ def register_create_handlers(bot):
                     if len(lines) >= 3 and lines[2].strip() != "":
                         host_domain = lines[2].strip()
         except Exception as e:
-            print(f"Error reading domain: {e}")
+            pass
         
-        # إعدادات الأمان
         if selected_port == 443:
             security_type = "tls"
             sni_param = host_domain
@@ -376,27 +395,15 @@ def register_create_handlers(bot):
             sni_param = ""
             sni_str = ""
 
-        # توليد الرابط
         if protocol == "vless":
             final_link = f"vless://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={fixed_path}{sni_str}#{data['name']}"
         elif protocol == "trojan":
             final_link = f"trojan://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={fixed_path}{sni_str}#{data['name']}"
         elif protocol == "vmess":
             vmess_dict = {
-                "v": "2",
-                "ps": data['name'],
-                "add": host_domain,
-                "port": str(selected_port),
-                "id": data['uuid'],
-                "aid": "0",
-                "scy": "auto",
-                "net": "ws",
-                "type": "none",
-                "host": host_domain,
-                "path": fixed_path,
-                "tls": security_type,
-                "sni": sni_param,
-                "alpn": ""
+                "v": "2", "ps": data['name'], "add": host_domain, "port": str(selected_port),
+                "id": data['uuid'], "aid": "0", "scy": "auto", "net": "ws", "type": "none",
+                "host": host_domain, "path": fixed_path, "tls": security_type, "sni": sni_param, "alpn": ""
             }
             vmess_json = json.dumps(vmess_dict)
             vmess_b64 = base64.b64encode(vmess_json.encode('utf-8')).decode('utf-8')
@@ -405,7 +412,6 @@ def register_create_handlers(bot):
             final_link = f"vless://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={fixed_path}{sni_str}#{data['name']}"
         
         quota_display = "بلا حدود ♾️" if data['quota_bytes'] == 0 else f"{data['quota_bytes'] / (1024**3):.2f} GB"
-        
         summary = f"""
 ✅ **تم إنشاء الكود وتفعيله بالسيرفر بنجاح!**
 
@@ -421,40 +427,11 @@ def register_create_handlers(bot):
 🔗 **انسخ الكود أدناه والصقه في تطبيق (DarkTunnel أو v2rayNG):**
 `{final_link}`
         """
-        
         bot.send_message(chat_id, summary, parse_mode="Markdown")
-        
-        # تنظيف الذاكرة بعد الاكتمال
         creation_data.pop(chat_id, None)
 
-        # ==========================================
-        # 🔄 نظام الريستارت الذكي المباشر (بعد الإنشاء لعمل الكود فوراً)
-        # ==========================================
-        try:
-            home_dir = os.path.expanduser("~")
-            key_file = f"{home_dir}/alwaysdata_keys.txt"
-            
-            if os.path.exists(key_file):
-                with open(key_file, 'r') as f:
-                    lines = f.read().strip().split('\n')
-                    if len(lines) >= 2:
-                        SITE_ID = lines[0].strip()
-                        API_KEY = lines[1].strip()
-                        
-                        alwaysdata_url = f"https://api.alwaysdata.com/v1/site/{SITE_ID}/restart/"
-                        
-                        time.sleep(1)
-                        response = requests.post(alwaysdata_url, auth=(API_KEY, ''))
-                        
-                        if response.status_code in [200, 201, 202, 204]:
-                            bot.send_message(chat_id, "🔄 تم الريستارت التلقائي للسيرفر بنجاح! 🚀 الكود هسه شغال.")
-                        else:
-                            bot.send_message(chat_id, f"⚠️ الكود انحفظ، بس فشل الريستارت التلقائي. كود الخطأ: {response.status_code}")
-                    else:
-                        bot.send_message(chat_id, "⚠️ ملف alwaysdata_keys.txt ناقص بيانات (يحتاج Site ID و API Key).")
-            else:
-                bot.send_message(chat_id, "⚠️ لم يتم العثور على ملف alwaysdata_keys.txt في السيرفر لعمل ريستارت تلقائي.")
-                
-        except Exception as e:
-            bot.send_message(chat_id, "⚠️ صار خلل اثناء محاولة الريستارت.")
-            print(f"Alwaysdata Request Error: {e}")
+        # === 5. ريستارت فوري لتفعيل المشترك الجديد ===
+        time.sleep(1) # استراحة ثانية لضمان اكتمال الكتابة على الملفات
+        success_msg = "🔄 تم الريستارت التلقائي للسيرفر بنجاح! 🚀 الكود هسه شغال."
+        fail_msg = "⚠️ الكود انحفظ، بس فشل الريستارت التلقائي."
+        restart_alwaysdata(bot, chat_id, success_msg, fail_msg)
