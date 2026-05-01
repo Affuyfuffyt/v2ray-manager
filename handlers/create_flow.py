@@ -10,9 +10,8 @@ import threading
 import os 
 import urllib.parse 
 
-# 👇 التصحيح الدقيق: استدعاء دوال SQLite من ملف db.py ، ودوال JSON من database.py
-from db import add_user, get_active_users, set_user_expired 
-from database import save_user 
+# 👇 التصحيح هنا: استدعاء كل الدوال من ملف database.py الموحد حتى ما يكرش البوت
+from database import save_user, add_user, get_active_users, set_user_expired 
 
 # قاموس لحفظ بيانات الإنشاء المؤقتة
 creation_data = {}
@@ -55,7 +54,7 @@ def add_client_to_config(user_name, uuid_val, protocol):
                             elif protocol == "trojan":
                                 clients.append({"password": uuid_val, "email": user_name}) # التورجان حصراً يأخذ password
                             modified = True
-                        break # لقينا التاك الصح، نطلع من اللوب
+                        break 
                         
             if modified:
                 with open(config_path, 'w', encoding='utf-8') as f:
@@ -112,17 +111,13 @@ def restart_alwaysdata(bot=None, chat_id=None, success_msg=None, fail_msg=None):
                         else:
                             bot.send_message(chat_id, f"{fail_msg}\nكود الخطأ: {response.status_code}")
                     return response.status_code in [200, 201, 202, 204]
-                else:
-                    if bot and chat_id: bot.send_message(chat_id, "⚠️ ملف alwaysdata_keys.txt ناقص بيانات.")
-        else:
-            if bot and chat_id: bot.send_message(chat_id, "⚠️ لم يتم العثور على ملف alwaysdata_keys.txt.")
     except Exception as e:
         if bot and chat_id: bot.send_message(chat_id, "⚠️ حدث خطأ في الاتصال بمنصة Alwaysdata.")
         print(f"Restart Error: {e}")
     return False
 
 # ==========================================
-# ⏱️ دالة العداد التنازلي لطرد المشترك بالخلفية (الذاكرة المؤقتة)
+# ⏱️ دالة العداد التنازلي لطرد المشترك بالخلفية
 # ==========================================
 def auto_restart_on_expiry(bot, chat_id, expiry_time, user_name, uuid_val, protocol):
     wait_seconds = expiry_time - time.time()
@@ -130,8 +125,6 @@ def auto_restart_on_expiry(bot, chat_id, expiry_time, user_name, uuid_val, proto
         time.sleep(wait_seconds) 
         
     # 🚨 انتهى الوقت!
-    
-    # 1. نحذف من الـ API 
     if protocol != "trojan":
         try:
             from xray_core.panel_api import PanelAPI
@@ -142,17 +135,14 @@ def auto_restart_on_expiry(bot, chat_id, expiry_time, user_name, uuid_val, proto
             except: pass
         except: pass
     
-    # 2. نحذف من الملف يدوياً لضمان الطرد النهائي 100%
     remove_client_from_config(uuid_val)
-    
-    # 3. نضرب ريستارت ونبلغ التلكرام
     success_msg = f"🛑 **تنبيه انتهاء صلاحية!** 🛑\n\n👤 المشترك: `{user_name}`\n⏳ انتهى وقته للتو.\n🔄 **تم سحب صلاحيته وعمل ريستارت للسيرفر لطرده نهائياً!**"
     fail_msg = f"⚠️ انتهى وقت `{user_name}` ولكن فشل الريستارت التلقائي!"
     restart_alwaysdata(bot, chat_id, success_msg, fail_msg)
 
 
 # ==========================================
-# 👁️ مراقب قاعدة البيانات الدائم (Watchdog) - يطرد المشتركين في حال تم إطفاء البوت
+# 👁️ مراقب قاعدة البيانات الدائم (Watchdog)
 # ==========================================
 def database_expiry_watchdog(bot):
     admin_id = None
@@ -168,38 +158,31 @@ def database_expiry_watchdog(bot):
 
     while True:
         try:
-            active_users = get_active_users() # يقرأ من db.py (SQLite)
+            active_users = get_active_users() # يقرأ من الداتا بيس
             current_time = time.time()
             expired_names = []
             
             for email, uuid_val, expiry_date in active_users:
                 if expiry_date and current_time >= float(expiry_date):
-                    # 1. نحذفه من الكونفك الفعلي
                     remove_client_from_config(uuid_val)
-                    # 2. نحدث حالته بالداتا بيس حتى ما يرجع يقراه
                     set_user_expired(email)
                     expired_names.append(email)
                     
-            if expired_names:
-                # 3. إذا اكو مشتركين انتهوا، نضرب ريستارت واحد يطرد الكل
+            if expired_names and admin_id:
                 success = restart_alwaysdata()
-                if admin_id:
-                    names_str = "\n".join([f"• `{name}`" for name in expired_names])
-                    if success:
-                        msg = f"🛑 **تنبيه مراقب قاعدة البيانات!** 🛑\n\nالمنتهين:\n{names_str}\n\n🔄 **تم سحب الصلاحيات وعمل ريستارت للسيرفر لطردهم!**"
-                    else:
-                        msg = f"⚠️ تم مسح المشتركين ({names_str}) من الملف ولكن فشل الريستارت التلقائي!"
-                    bot.send_message(admin_id, msg, parse_mode="Markdown")
-                    
+                names_str = "\n".join([f"• `{name}`" for name in expired_names])
+                if success:
+                    msg = f"🛑 **تنبيه مراقب قاعدة البيانات!** 🛑\n\nالمنتهين:\n{names_str}\n\n🔄 **تم سحب الصلاحيات وعمل ريستارت للسيرفر لطردهم!**"
+                else:
+                    msg = f"⚠️ تم مسح المشتركين ({names_str}) من الملف ولكن فشل الريستارت التلقائي!"
+                bot.send_message(admin_id, msg, parse_mode="Markdown")
+                
         except Exception as e:
             pass
-            
-        time.sleep(60) # يفحص قاعدة البيانات كل 60 ثانية
+        time.sleep(60)
 
 
 def register_create_handlers(bot):
-
-    # تشغيل مراقب الداتا بيس لمرة واحدة
     global watchdog_started
     if not watchdog_started:
         threading.Thread(target=database_expiry_watchdog, args=(bot,), daemon=True).start()
@@ -423,33 +406,24 @@ def register_create_handlers(bot):
         
         expiry_time = time.time() + sec
 
-        # === 1. حجب الـ API عن التدخل بالتورجان نهائياً ===
         if protocol != "trojan":
             try:
                 from xray_core.panel_api import PanelAPI
                 local_api = PanelAPI()
                 local_api.create_client(data['name'], data['uuid'], protocol)
             except Exception as e:
-                print(f"PanelAPI Error: {e}")
+                pass
 
-        # === 2. تصحيح وإضافة المشترك يدوياً (المنقذ الحقيقي) ===
         add_client_to_config(data['name'], data['uuid'], protocol)
 
-        # === 3. حفظ بقاعدة البيانات (المزدوج لتجنب الأخطاء) 🔥 ===
-        # الحفظ الأول: في JSON (حتى قائمة الإدارة والتمديد تشتغل صح)
+        # الحفظ المزدوج (قاعدة بيانات وحدة بعد الدمج)
         try:
             save_user(data['name'], data['uuid'], data['quota_bytes'], expiry_time)
-        except Exception as e:
-            print(f"Error saving to JSON DB: {e}")
-            
-        # الحفظ الثاني: في SQLite (حتى المراقب الدائم يطردهم)
-        try:
             selected_port = data.get('port', 443)
             add_user(data['name'], data['uuid'], selected_port, data['quota_bytes'], expiry_time)
         except Exception as e:
-            print(f"Error saving to SQLite DB: {e}")
+            print(f"Error saving to DB: {e}")
 
-        # === 4. إطلاق العداد التنازلي للطرد ===
         threading.Thread(
             target=auto_restart_on_expiry, 
             args=(bot, chat_id, expiry_time, data['name'], data['uuid'], protocol), 
@@ -478,10 +452,8 @@ def register_create_handlers(bot):
             sni_param = ""
             sni_str = ""
 
-        # 🔥 التشفير للمسار حتى DarkTunnel يشتغل طبيعي 🔥
         encoded_path = urllib.parse.quote(fixed_path, safe='')
 
-        # === 5. توليد روابط الاتصال بذكاء ===
         if protocol == "vless":
             final_link = f"vless://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={encoded_path}&host={host_domain}{sni_str}#{data['name']}"
         elif protocol == "trojan":
@@ -517,7 +489,6 @@ def register_create_handlers(bot):
         bot.send_message(chat_id, summary, parse_mode="Markdown")
         creation_data.pop(chat_id, None)
 
-        # === 6. ريستارت فوري لتفعيل الكود ===
         time.sleep(1) 
         success_msg = "🔄 تم الريستارت التلقائي للسيرفر بنجاح! 🚀 الكود هسه شغال."
         fail_msg = "⚠️ الكود انحفظ، بس فشل الريستارت التلقائي."
