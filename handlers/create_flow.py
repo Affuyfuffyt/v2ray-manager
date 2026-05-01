@@ -12,6 +12,9 @@ import os
 # قاموس لحفظ بيانات الإنشاء المؤقتة
 creation_data = {}
 
+# متغير لمنع تشغيل المراقب أكثر من مرة
+watchdog_started = False
+
 # ==========================================
 # 🛠️ دالة الإضافة الذكية (المنقذ الحقيقي لبروتوكول التورجان)
 # ==========================================
@@ -110,7 +113,7 @@ def restart_alwaysdata(bot, chat_id, success_msg, fail_msg):
         print(f"Restart Error: {e}")
 
 # ==========================================
-# ⏱️ دالة العداد التنازلي لطرد المشترك بالخلفية
+# ⏱️ دالة العداد التنازلي لطرد المشترك بالخلفية (الذاكرة المؤقتة)
 # ==========================================
 def auto_restart_on_expiry(bot, chat_id, expiry_time, user_name, uuid_val, protocol):
     wait_seconds = expiry_time - time.time()
@@ -139,7 +142,74 @@ def auto_restart_on_expiry(bot, chat_id, expiry_time, user_name, uuid_val, proto
     restart_alwaysdata(bot, chat_id, success_msg, fail_msg)
 
 
+# ==========================================
+# 👁️ مراقب قاعدة البيانات الدائم (Watchdog) - يطرد حتى بعد إطفاء البوت
+# ==========================================
+def database_expiry_watchdog(bot):
+    admin_id = None
+    home_dir = os.path.expanduser("~")
+    env_path = f"{home_dir}/v2ray_manager/.env"
+    
+    # محاولة جلب أيدي الأدمن من ملف .env لإرسال الإشعارات له
+    if os.path.exists(env_path):
+        with open(env_path, 'r') as f:
+            for line in f:
+                if line.startswith("ADMIN_ID="):
+                    try: admin_id = int(line.strip().split("=")[1])
+                    except: pass
+
+    while True:
+        try:
+            # استدعاء دوال الداتا بيس
+            from database import get_active_users, set_user_expired
+            active_users = get_active_users()
+            current_time = time.time()
+            expired_names = []
+            
+            for email, uuid_val, expiry_date in active_users:
+                if expiry_date and current_time >= float(expiry_date):
+                    # مسح من الكونفك وتحديث الداتا بيس
+                    remove_client_from_config(uuid_val)
+                    set_user_expired(email)
+                    expired_names.append(email)
+                    
+            if expired_names and admin_id:
+                # إذا اكو ناس انتهوا، نضرب ريستارت وندز اشعار للادمن
+                key_file = f"{home_dir}/alwaysdata_keys.txt"
+                success = False
+                if os.path.exists(key_file):
+                    with open(key_file, 'r') as f:
+                        lines = f.read().strip().split('\n')
+                        if len(lines) >= 2:
+                            SITE_ID = lines[0].strip()
+                            API_KEY = lines[1].strip()
+                            url = f"https://api.alwaysdata.com/v1/site/{SITE_ID}/restart/"
+                            res = requests.post(url, auth=(API_KEY, ''))
+                            if res.status_code in [200, 201, 202, 204]:
+                                success = True
+                
+                names_str = "\n".join([f"• `{name}`" for name in expired_names])
+                if success:
+                    msg = f"🛑 **تنبيه مراقب قاعدة البيانات!** 🛑\n\nالمنتهين:\n{names_str}\n\n🔄 **تم سحب الصلاحيات وعمل ريستارت للسيرفر لطردهم!**"
+                else:
+                    msg = f"⚠️ انتهى وقت المشتركين:\n{names_str}\nولكن فشل الريستارت التلقائي!"
+                bot.send_message(admin_id, msg, parse_mode="Markdown")
+                
+        except Exception as e:
+            # نتجاهل الخطأ بصمت حتى لا يتوقف المراقب
+            pass
+            
+        # المراقب ينتظر 60 ثانية قبل لا يفحص مرة ثانية
+        time.sleep(60)
+
+
 def register_create_handlers(bot):
+    
+    global watchdog_started
+    if not watchdog_started:
+        # تشغيل مراقب قاعدة البيانات عند أول تشغيل للبوت
+        threading.Thread(target=database_expiry_watchdog, args=(bot,), daemon=True).start()
+        watchdog_started = True
 
     @bot.callback_query_handler(func=lambda call: call.data == "create_code")
     def start_creation(call):
