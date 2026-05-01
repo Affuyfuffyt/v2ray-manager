@@ -48,7 +48,7 @@ def renew_user(email, extra_bytes, new_expiry):
 
 
 # ==========================================
-# 2️⃣ قسم قاعدة بيانات SQLite (لعمل المراقب الذكي والطرد التلقائي)
+# 2️⃣ قسم قاعدة بيانات SQLite (لعمل المراقب الذكي والـ Radar)
 # ==========================================
 def init_sqlite_db():
     conn = sqlite3.connect(SQLITE_DB_PATH)
@@ -57,14 +57,32 @@ def init_sqlite_db():
                  (email TEXT PRIMARY KEY, uuid TEXT, port INTEGER, quota_bytes REAL, expiry_date TEXT, status TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS daily_usage
                  (email TEXT, date TEXT, total_used REAL)''')
+    
+    # 🔥 إضافة حقول الرادار بدون مسح البيانات القديمة 🔥
+    try:
+        c.execute("ALTER TABLE users ADD COLUMN last_seen TEXT")
+    except:
+        pass # الحقل موجود مسبقاً
+    try:
+        c.execute("ALTER TABLE users ADD COLUMN total_connection_seconds REAL DEFAULT 0")
+    except:
+        pass # الحقل موجود مسبقاً
+
     conn.commit()
     conn.close()
 
 def add_user(email, uuid, port, quota_bytes, expiry_date):
     conn = sqlite3.connect(SQLITE_DB_PATH)
     c = conn.cursor()
-    c.execute("INSERT OR REPLACE INTO users VALUES (?, ?, ?, ?, ?, ?)", 
-              (email, uuid, port, quota_bytes, str(expiry_date), 'active'))
+    # نتحقق إذا المشترك موجود نحدث بس بياناته الأساسية حتى ما يتصفر وقته بالرادار
+    c.execute("SELECT email FROM users WHERE email=?", (email,))
+    if c.fetchone():
+        c.execute("UPDATE users SET uuid=?, port=?, quota_bytes=?, expiry_date=?, status='active' WHERE email=?",
+                  (uuid, port, quota_bytes, str(expiry_date), email))
+    else:
+        # إذا مشترك جديد، ننزله مع تصفير الرادار
+        c.execute("INSERT INTO users (email, uuid, port, quota_bytes, expiry_date, status, last_seen, total_connection_seconds) VALUES (?, ?, ?, ?, ?, ?, NULL, 0)", 
+                  (email, uuid, port, quota_bytes, str(expiry_date), 'active'))
     conn.commit()
     conn.close()
 
@@ -82,6 +100,28 @@ def set_user_expired(email):
     c.execute("UPDATE users SET status='expired' WHERE email=?", (email,))
     conn.commit()
     conn.close()
+
+# ==========================================
+# 📡 دوال الرادار الجديدة (Radar Functions)
+# ==========================================
+def update_radar_data(email):
+    conn = sqlite3.connect(SQLITE_DB_PATH)
+    c = conn.cursor()
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # يضيف 60 ثانية (دقيقة) لوقت المشترك المتصل ويحدث آخر ظهور
+    c.execute("UPDATE users SET last_seen=?, total_connection_seconds = COALESCE(total_connection_seconds, 0) + 60 WHERE email=?", (now_str, email))
+    conn.commit()
+    conn.close()
+
+def get_radar_data(email):
+    conn = sqlite3.connect(SQLITE_DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT last_seen, total_connection_seconds FROM users WHERE email=?", (email,))
+    result = c.fetchone()
+    conn.close()
+    if result:
+        return {"last_seen": result[0], "total_seconds": result[1] or 0}
+    return {"last_seen": None, "total_seconds": 0}
 
 # --- دوال الإحصائيات (مدمجة) ---
 def log_daily_usage(email, total_used_bytes):
@@ -110,7 +150,7 @@ def get_usage_stats(email, current_total_used):
 # ==========================================
 class DummyDB:
     def init_db(self):
-        init_sqlite_db() # إنشاء جداول SQLite تلقائياً
+        init_sqlite_db()
         
     def get_all_users(self):
         return list(load_db().keys())
@@ -122,13 +162,11 @@ class DummyDB:
         return load_db().get(email)
         
     def delete_user(self, email):
-        # يمسح المشترك من الـ JSON
         data = load_db()
         if email in data:
             del data[email]
             update_db(data)
         
-        # يمسح المشترك من الـ SQLite
         try:
             conn = sqlite3.connect(SQLITE_DB_PATH)
             c = conn.cursor()
@@ -138,6 +176,5 @@ class DummyDB:
         except:
             pass
 
-# إنشاء الكائن وتفعيل القواعد عند التشغيل
 db = DummyDB()
 db.init_db()
