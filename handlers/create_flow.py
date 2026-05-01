@@ -8,8 +8,8 @@ import time
 import requests 
 import threading 
 import os 
-# 👇 استدعاء دوال قاعدة البيانات الجديدة (SQLite)
-from database import add_user, get_active_users, set_user_expired 
+import urllib.parse # 👈 ضروري لتشفير مسار التورجان
+from database import add_user, get_active_users, set_user_expired # 👈 استدعاء الداتا بيس الصحيح
 
 # قاموس لحفظ بيانات الإنشاء المؤقتة
 creation_data = {}
@@ -432,7 +432,7 @@ def register_create_handlers(bot):
         # === 2. تصحيح وإضافة المشترك يدوياً (المنقذ الحقيقي) ===
         add_client_to_config(data['name'], data['uuid'], protocol)
 
-        # === 3. حفظ بقاعدة البيانات (التحديث الأخير الخاص بالـ SQLite) ===
+        # === 3. حفظ بقاعدة البيانات بالاسم الصحيح add_user ===
         try:
             selected_port = data.get('port', 443)
             add_user(data['name'], data['uuid'], selected_port, data['quota_bytes'], expiry_time)
@@ -468,11 +468,14 @@ def register_create_handlers(bot):
             sni_param = ""
             sni_str = ""
 
+        # 🔥 التشفير للمسار حتى DarkTunnel يشتغل طبيعي 🔥
+        encoded_path = urllib.parse.quote(fixed_path, safe='')
+
         # === 5. توليد روابط الاتصال بذكاء ===
         if protocol == "vless":
-            final_link = f"vless://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={fixed_path}&host={host_domain}{sni_str}#{data['name']}"
+            final_link = f"vless://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={encoded_path}&host={host_domain}{sni_str}#{data['name']}"
         elif protocol == "trojan":
-            final_link = f"trojan://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={fixed_path}&host={host_domain}{sni_str}#{data['name']}"
+            final_link = f"trojan://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={encoded_path}&host={host_domain}{sni_str}#{data['name']}"
         elif protocol == "vmess":
             vmess_dict = {
                 "v": "2", "ps": data['name'], "add": host_domain, "port": str(selected_port),
@@ -483,7 +486,7 @@ def register_create_handlers(bot):
             vmess_b64 = base64.b64encode(vmess_json.encode('utf-8')).decode('utf-8')
             final_link = f"vmess://{vmess_b64}"
         else:
-            final_link = f"vless://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={fixed_path}&host={host_domain}{sni_str}#{data['name']}"
+            final_link = f"vless://{data['uuid']}@{host_domain}:{selected_port}?type=ws&security={security_type}&path={encoded_path}&host={host_domain}{sni_str}#{data['name']}"
         
         quota_display = "بلا حدود ♾️" if data['quota_bytes'] == 0 else f"{data['quota_bytes'] / (1024**3):.2f} GB"
         summary = f"""
