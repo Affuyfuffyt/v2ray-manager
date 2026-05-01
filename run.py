@@ -4,10 +4,13 @@ import threading
 import subprocess
 import time
 import config
+import os
 from xray_core.panel_api import PanelAPI
-from handlers import admin_start, create_flow, manage_flow, speed_test
-# استدعاء المراقب (صار جاهز للعمل بالخلفية)
+# استدعاء المعالجات
+from handlers import admin_start, create_flow, manage_flow, speed_test, radar_flow
+# استدعاء المراقبين (نظام الطرد ونظام الرادار الجديد)
 from quota_monitor import start_quota_monitor 
+from radar_monitor import start_radar_monitor # 👈 الرادار الجديد
 
 # 1. تهيئة البوت والـ API
 bot = telebot.TeleBot(config.BOT_TOKEN)
@@ -48,9 +51,9 @@ def get_server_status_text():
         text += f"━━━━━━━━━━━━━━━━━━\n"
         text += f"⚙️ **CPU:** `[{make_bar(cpu_usage)}]` {cpu_usage:.1f}%\n"
         text += f"🗄️ **RAM:** `[{make_bar(ram_percent)}]` {ram_percent}%\n"
-        text += f"   └ 📊 {ram_used}MB / {ram_total}MB\n"
+        text += f"    └ 📊 {ram_used}MB / {ram_total}MB\n"
         text += f"💾 **Disk:** `[{make_bar(disk_percent)}]` {disk_percent}%\n"
-        text += f"   └ 📊 {disk_used} / {disk_total}\n"
+        text += f"    └ 📊 {disk_used} / {disk_total}\n"
         text += f"━━━━━━━━━━━━━━━━━━\n"
         text += f"⏱️ _آخر تحديث: {time.strftime('%H:%M:%S')}_\n"
         
@@ -70,19 +73,17 @@ def get_status_keyboard(is_live=False):
     return markup
 
 # ==========================================
-# 3. تسجيل المعالجات (Handlers) لجميع الأقسام
+# 3. تسجيل المعالجات (Handlers)
 # ==========================================
 create_flow.register_create_handlers(bot)
 manage_flow.register_manage_handlers(bot)
 speed_test.register_speed_handlers(bot)
+radar_flow.register_radar_handlers(bot) # 👈 تسجيل معالج الرادار الجديد
 
 @bot.message_handler(commands=['start'], is_admin=True)
 def start(message):
     admin_start.show_main_menu(bot, message.chat.id)
 
-# ----------------- أوامر حالة الخادم -----------------
-
-# 🔥 التعديل هنا: تحويل الاستقبال إلى زر شفاف (Callback) بدلاً من رسالة نصية 🔥
 @bot.callback_query_handler(func=lambda call: call.data == "server_status")
 def send_server_status(call):
     text = get_server_status_text()
@@ -104,7 +105,6 @@ def handle_status_callbacks(call):
     elif call.data == "status_live":
         bot.answer_callback_query(call.id, "📡 تم تفعيل المراقبة الحية لمدة دقيقتين!")
         live_monitors[msg_id] = True
-        
         markup = get_status_keyboard(is_live=True)
         bot.edit_message_reply_markup(chat_id, msg_id, reply_markup=markup)
         
@@ -112,22 +112,19 @@ def handle_status_callbacks(call):
             end_time = time.time() + 120
             while time.time() < end_time and live_monitors.get(msg_id, False):
                 time.sleep(3)
-                if not live_monitors.get(msg_id, False): 
-                    break
+                if not live_monitors.get(msg_id, False): break
                 try:
                     text = get_server_status_text()
                     markup = get_status_keyboard(is_live=True)
                     bot.edit_message_text(text, chat_id, msg_id, reply_markup=markup, parse_mode="Markdown")
-                except Exception:
-                    pass
+                except: pass
             
             live_monitors[msg_id] = False
             try:
                 final_text = get_server_status_text() + "\n*(انتهت المراقبة المستمرة)*"
                 markup = get_status_keyboard(is_live=False)
                 bot.edit_message_text(final_text, chat_id, msg_id, reply_markup=markup, parse_mode="Markdown")
-            except:
-                pass
+            except: pass
 
         threading.Thread(target=live_update_thread).start()
         
@@ -141,13 +138,15 @@ def handle_status_callbacks(call):
 if __name__ == "__main__":
     print(f"🚀 البوت يعمل الآن للأدمن ID: {config.ADMIN_ID}")
     
-    # ✅ تم تفعيل مراقب الوقت بالخلفية لضمان طرد المشتركين المنتهين
-    monitor_thread = threading.Thread(target=start_quota_monitor, daemon=True)
-    monitor_thread.start()
-    print("📊 نظام مراقبة الوقت (والطرد الفوري) يعمل الآن بالخلفية...")
+    # ✅ 1. تشغيل مراقب الحصص (الطرد التلقائي)
+    threading.Thread(target=start_quota_monitor, daemon=True).start()
+    
+    # ✅ 2. تشغيل مراقب السجلات (الرادار 24 ساعة)
+    threading.Thread(target=start_radar_monitor, daemon=True).start()
+    
+    print("📡 نظام الرادار ومراقبة الوقت يعملان الآن بالخلفية...")
     
     try:
-        # البدء باستقبال أوامر التلجرام
         bot.infinity_polling()
     except Exception as e:
         print(f"❌ حدث خطأ في البوت: {e}")
