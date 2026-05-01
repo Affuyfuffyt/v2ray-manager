@@ -8,8 +8,11 @@ import time
 import requests 
 import threading 
 import os 
-import urllib.parse # 👈 ضروري لتشفير مسار التورجان
-from database import add_user, get_active_users, set_user_expired # 👈 استدعاء الداتا بيس الصحيح
+import urllib.parse 
+
+# 👇 التصحيح الدقيق: استدعاء دوال SQLite من ملف db.py ، ودوال JSON من database.py
+from db import add_user, get_active_users, set_user_expired 
+from database import save_user 
 
 # قاموس لحفظ بيانات الإنشاء المؤقتة
 creation_data = {}
@@ -165,7 +168,7 @@ def database_expiry_watchdog(bot):
 
     while True:
         try:
-            active_users = get_active_users()
+            active_users = get_active_users() # يقرأ من db.py (SQLite)
             current_time = time.time()
             expired_names = []
             
@@ -432,12 +435,19 @@ def register_create_handlers(bot):
         # === 2. تصحيح وإضافة المشترك يدوياً (المنقذ الحقيقي) ===
         add_client_to_config(data['name'], data['uuid'], protocol)
 
-        # === 3. حفظ بقاعدة البيانات بالاسم الصحيح add_user ===
+        # === 3. حفظ بقاعدة البيانات (المزدوج لتجنب الأخطاء) 🔥 ===
+        # الحفظ الأول: في JSON (حتى قائمة الإدارة والتمديد تشتغل صح)
+        try:
+            save_user(data['name'], data['uuid'], data['quota_bytes'], expiry_time)
+        except Exception as e:
+            print(f"Error saving to JSON DB: {e}")
+            
+        # الحفظ الثاني: في SQLite (حتى المراقب الدائم يطردهم)
         try:
             selected_port = data.get('port', 443)
             add_user(data['name'], data['uuid'], selected_port, data['quota_bytes'], expiry_time)
         except Exception as e:
-            print(f"Error saving to DB: {e}")
+            print(f"Error saving to SQLite DB: {e}")
 
         # === 4. إطلاق العداد التنازلي للطرد ===
         threading.Thread(
