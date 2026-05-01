@@ -8,7 +8,8 @@ import time
 import requests 
 import threading 
 import os 
-from database import add_user, get_active_users, set_user_expired # 👈 استدعاء الداتا بيس
+# 👇 استدعاء دوال قاعدة البيانات الجديدة (SQLite)
+from database import add_user, get_active_users, set_user_expired 
 
 # قاموس لحفظ بيانات الإنشاء المؤقتة
 creation_data = {}
@@ -118,7 +119,7 @@ def restart_alwaysdata(bot=None, chat_id=None, success_msg=None, fail_msg=None):
     return False
 
 # ==========================================
-# ⏱️ دالة العداد التنازلي لطرد المشترك بالخلفية
+# ⏱️ دالة العداد التنازلي لطرد المشترك بالخلفية (الذاكرة المؤقتة)
 # ==========================================
 def auto_restart_on_expiry(bot, chat_id, expiry_time, user_name, uuid_val, protocol):
     wait_seconds = expiry_time - time.time()
@@ -431,9 +432,10 @@ def register_create_handlers(bot):
         # === 2. تصحيح وإضافة المشترك يدوياً (المنقذ الحقيقي) ===
         add_client_to_config(data['name'], data['uuid'], protocol)
 
-        # === 3. حفظ بقاعدة البيانات ===
+        # === 3. حفظ بقاعدة البيانات (التحديث الأخير الخاص بالـ SQLite) ===
         try:
-            save_user(data['name'], data['uuid'], data['port'], data['quota_bytes'], expiry_time)
+            selected_port = data.get('port', 443)
+            add_user(data['name'], data['uuid'], selected_port, data['quota_bytes'], expiry_time)
         except Exception as e:
             print(f"Error saving to DB: {e}")
 
