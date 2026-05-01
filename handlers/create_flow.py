@@ -8,6 +8,7 @@ import time
 import requests 
 import threading 
 import os 
+from database import add_user, get_active_users, set_user_expired # 👈 استدعاء الداتا بيس
 
 # قاموس لحفظ بيانات الإنشاء المؤقتة
 creation_data = {}
@@ -88,7 +89,7 @@ def remove_client_from_config(uuid_val):
 # ==========================================
 # 🔄 دالة موحدة لعمل ريستارت للسيرفر عبر Alwaysdata API
 # ==========================================
-def restart_alwaysdata(bot, chat_id, success_msg, fail_msg):
+def restart_alwaysdata(bot=None, chat_id=None, success_msg=None, fail_msg=None):
     try:
         home_dir = os.path.expanduser("~")
         key_file = f"{home_dir}/alwaysdata_keys.txt"
@@ -100,20 +101,24 @@ def restart_alwaysdata(bot, chat_id, success_msg, fail_msg):
                     API_KEY = lines[1].strip()
                     url = f"https://api.alwaysdata.com/v1/site/{SITE_ID}/restart/"
                     response = requests.post(url, auth=(API_KEY, ''))
-                    if response.status_code in [200, 201, 202, 204]:
-                        bot.send_message(chat_id, success_msg, parse_mode="Markdown")
-                    else:
-                        bot.send_message(chat_id, f"{fail_msg}\nكود الخطأ: {response.status_code}")
+                    
+                    if bot and chat_id:
+                        if response.status_code in [200, 201, 202, 204]:
+                            bot.send_message(chat_id, success_msg, parse_mode="Markdown")
+                        else:
+                            bot.send_message(chat_id, f"{fail_msg}\nكود الخطأ: {response.status_code}")
+                    return response.status_code in [200, 201, 202, 204]
                 else:
-                    bot.send_message(chat_id, "⚠️ ملف alwaysdata_keys.txt ناقص بيانات.")
+                    if bot and chat_id: bot.send_message(chat_id, "⚠️ ملف alwaysdata_keys.txt ناقص بيانات.")
         else:
-            bot.send_message(chat_id, "⚠️ لم يتم العثور على ملف alwaysdata_keys.txt.")
+            if bot and chat_id: bot.send_message(chat_id, "⚠️ لم يتم العثور على ملف alwaysdata_keys.txt.")
     except Exception as e:
-        bot.send_message(chat_id, "⚠️ حدث خطأ في الاتصال بمنصة Alwaysdata.")
+        if bot and chat_id: bot.send_message(chat_id, "⚠️ حدث خطأ في الاتصال بمنصة Alwaysdata.")
         print(f"Restart Error: {e}")
+    return False
 
 # ==========================================
-# ⏱️ دالة العداد التنازلي لطرد المشترك بالخلفية (الذاكرة المؤقتة)
+# ⏱️ دالة العداد التنازلي لطرد المشترك بالخلفية
 # ==========================================
 def auto_restart_on_expiry(bot, chat_id, expiry_time, user_name, uuid_val, protocol):
     wait_seconds = expiry_time - time.time()
@@ -143,14 +148,13 @@ def auto_restart_on_expiry(bot, chat_id, expiry_time, user_name, uuid_val, proto
 
 
 # ==========================================
-# 👁️ مراقب قاعدة البيانات الدائم (Watchdog) - يطرد حتى بعد إطفاء البوت
+# 👁️ مراقب قاعدة البيانات الدائم (Watchdog) - يطرد المشتركين في حال تم إطفاء البوت
 # ==========================================
 def database_expiry_watchdog(bot):
     admin_id = None
     home_dir = os.path.expanduser("~")
     env_path = f"{home_dir}/v2ray_manager/.env"
     
-    # محاولة جلب أيدي الأدمن من ملف .env لإرسال الإشعارات له
     if os.path.exists(env_path):
         with open(env_path, 'r') as f:
             for line in f:
@@ -160,54 +164,40 @@ def database_expiry_watchdog(bot):
 
     while True:
         try:
-            # استدعاء دوال الداتا بيس
-            from database import get_active_users, set_user_expired
             active_users = get_active_users()
             current_time = time.time()
             expired_names = []
             
             for email, uuid_val, expiry_date in active_users:
                 if expiry_date and current_time >= float(expiry_date):
-                    # مسح من الكونفك وتحديث الداتا بيس
+                    # 1. نحذفه من الكونفك الفعلي
                     remove_client_from_config(uuid_val)
+                    # 2. نحدث حالته بالداتا بيس حتى ما يرجع يقراه
                     set_user_expired(email)
                     expired_names.append(email)
                     
-            if expired_names and admin_id:
-                # إذا اكو ناس انتهوا، نضرب ريستارت وندز اشعار للادمن
-                key_file = f"{home_dir}/alwaysdata_keys.txt"
-                success = False
-                if os.path.exists(key_file):
-                    with open(key_file, 'r') as f:
-                        lines = f.read().strip().split('\n')
-                        if len(lines) >= 2:
-                            SITE_ID = lines[0].strip()
-                            API_KEY = lines[1].strip()
-                            url = f"https://api.alwaysdata.com/v1/site/{SITE_ID}/restart/"
-                            res = requests.post(url, auth=(API_KEY, ''))
-                            if res.status_code in [200, 201, 202, 204]:
-                                success = True
-                
-                names_str = "\n".join([f"• `{name}`" for name in expired_names])
-                if success:
-                    msg = f"🛑 **تنبيه مراقب قاعدة البيانات!** 🛑\n\nالمنتهين:\n{names_str}\n\n🔄 **تم سحب الصلاحيات وعمل ريستارت للسيرفر لطردهم!**"
-                else:
-                    msg = f"⚠️ انتهى وقت المشتركين:\n{names_str}\nولكن فشل الريستارت التلقائي!"
-                bot.send_message(admin_id, msg, parse_mode="Markdown")
-                
+            if expired_names:
+                # 3. إذا اكو مشتركين انتهوا، نضرب ريستارت واحد يطرد الكل
+                success = restart_alwaysdata()
+                if admin_id:
+                    names_str = "\n".join([f"• `{name}`" for name in expired_names])
+                    if success:
+                        msg = f"🛑 **تنبيه مراقب قاعدة البيانات!** 🛑\n\nالمنتهين:\n{names_str}\n\n🔄 **تم سحب الصلاحيات وعمل ريستارت للسيرفر لطردهم!**"
+                    else:
+                        msg = f"⚠️ تم مسح المشتركين ({names_str}) من الملف ولكن فشل الريستارت التلقائي!"
+                    bot.send_message(admin_id, msg, parse_mode="Markdown")
+                    
         except Exception as e:
-            # نتجاهل الخطأ بصمت حتى لا يتوقف المراقب
             pass
             
-        # المراقب ينتظر 60 ثانية قبل لا يفحص مرة ثانية
-        time.sleep(60)
+        time.sleep(60) # يفحص قاعدة البيانات كل 60 ثانية
 
 
 def register_create_handlers(bot):
-    
+
+    # تشغيل مراقب الداتا بيس لمرة واحدة
     global watchdog_started
     if not watchdog_started:
-        # تشغيل مراقب قاعدة البيانات عند أول تشغيل للبوت
         threading.Thread(target=database_expiry_watchdog, args=(bot,), daemon=True).start()
         watchdog_started = True
 
@@ -443,8 +433,7 @@ def register_create_handlers(bot):
 
         # === 3. حفظ بقاعدة البيانات ===
         try:
-            from database import save_user
-            save_user(data['name'], data['uuid'], data['quota_bytes'], expiry_time)
+            save_user(data['name'], data['uuid'], data['port'], data['quota_bytes'], expiry_time)
         except Exception as e:
             print(f"Error saving to DB: {e}")
 
