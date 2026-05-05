@@ -1,71 +1,141 @@
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
-from database import get_active_users, get_radar_data
+# استدعاء الدوال الجديدة من ملف db اللي حدثناه
+from db import get_active_users, get_full_radar_stats
 import time
 from datetime import datetime
 
+# دالة ذكية لتحويل الثواني إلى (ساعات، دقائق، ثواني) بشكل مرتب
+def format_duration(seconds):
+    seconds = int(seconds)
+    if seconds == 0:
+        return "0 ثانية"
+    h = seconds // 3600
+    m = (seconds % 3600) // 60
+    s = seconds % 60
+    parts = []
+    if h > 0: parts.append(f"{h} ساعة")
+    if m > 0: parts.append(f"{m} دقيقة")
+    if s > 0 or not parts: parts.append(f"{s} ثانية")
+    return " و ".join(parts)
+
 def register_radar_handlers(bot):
+    
+    # ==========================================
+    # 1️⃣ اللوحة الرئيسية للرادار (عرض الأزرار)
+    # ==========================================
     @bot.callback_query_handler(func=lambda call: call.data == "radar_status")
     def show_radar(call):
         chat_id = call.message.chat.id
         
         # جلب كل المشتركين من الداتا بيس
         active_users = get_active_users()
-        
-        online_users = []
-        today_users = []
-        offline_users = []
-        
+        markup = InlineKeyboardMarkup(row_width=1)
         now = datetime.now()
+        
+        online_count = 0
+        today_count = 0
+        offline_count = 0
+        
+        # نجمع الأزرار في قوائم حتى نرتبهم: المتصلين أولاً، ثم اليوم، ثم الخاملين
+        online_btns = []
+        today_btns = []
+        offline_btns = []
         
         for user in active_users:
             email = user[0]
-            # جلب معلومات الرادار الخاصة بالمشترك
-            radar = get_radar_data(email)
-            last_seen_str = radar.get("last_seen")
-            total_sec = radar.get("total_seconds", 0)
+            # جلب اللوحة الشاملة للمشترك
+            stats = get_full_radar_stats(email)
             
-            # تحويل الثواني الكلية إلى ساعات ودقائق للترتيب
-            hours = total_sec // 3600
-            minutes = (total_sec % 3600) // 60
-            time_spent = f"{int(hours)}h {int(minutes)}m" if hours > 0 else f"{int(minutes)}m"
-            
-            if not last_seen_str:
-                offline_users.append(f"👤 `{email}` - 👁️ لم يتصل أبداً")
+            # إذا ماكو بيانات (مشترك جديد لم يتصل بعد)
+            if not stats or not stats.get("last_seen"):
+                offline_btns.append(InlineKeyboardButton(f"🔴 {email} (خامل)", callback_data=f"ruser_{email}"))
+                offline_count += 1
                 continue
                 
+            last_seen_str = stats["last_seen"]
             last_seen_dt = datetime.strptime(last_seen_str, "%Y-%m-%d %H:%M:%S")
             diff = (now - last_seen_dt).total_seconds()
             
-            # إذا متصل آخر 120 ثانية (دقيقتين) نعتبره "متصل الآن"
+            # إذا متصل آخر دقيقتين
             if diff <= 120:
-                online_users.append(f"🟢 `{email}`\n└ ⏱️ مجموع اتصاله: {time_spent}")
-            # إذا متصل خلال آخر 24 ساعة
+                online_btns.append(InlineKeyboardButton(f"🟢 {email} (متصل الآن)", callback_data=f"ruser_{email}"))
+                online_count += 1
+            # إذا متصل آخر 24 ساعة
             elif diff <= 86400:
-                hours_ago = int(diff // 3600)
-                mins_ago = int((diff % 3600) // 60)
-                ago_str = f"قبل {hours_ago} ساعة و {mins_ago} دقيقة" if hours_ago > 0 else f"قبل {mins_ago} دقيقة"
-                today_users.append(f"🟡 `{email}`\n└ 👁️ آخر ظهور: {ago_str}")
+                today_btns.append(InlineKeyboardButton(f"🟡 {email} (نشط اليوم)", callback_data=f"ruser_{email}"))
+                today_count += 1
             # أكثر من 24 ساعة
             else:
-                days_ago = int(diff // 86400)
-                offline_users.append(f"🔴 `{email}`\n└ 👁️ آخر ظهور: قبل {days_ago} يوم")
+                offline_btns.append(InlineKeyboardButton(f"🔴 {email} (غير متصل)", callback_data=f"ruser_{email}"))
+                offline_count += 1
 
-        # ترتيب الرسالة
-        text = "📡 **رادار السيرفر (المراقبة الحية)**\n━━━━━━━━━━━━━━━\n\n"
+        # إضافة الأزرار للوحة بالترتيب
+        for btn in online_btns: markup.add(btn)
+        for btn in today_btns: markup.add(btn)
+        for btn in offline_btns: markup.add(btn)
+
+        # النص التوضيحي للوحة
+        text = f"📡 **رادار السيرفر المركزي**\n━━━━━━━━━━━━━━━\n"
+        text += f"🟢 متصل الآن: {online_count}\n"
+        text += f"🟡 نشط اليوم: {today_count}\n"
+        text += f"🔴 خامل: {offline_count}\n\n"
+        text += "👇 **اضغط على اسم المشترك لعرض لوحته الاستخباراتية:**"
+
+        markup.add(InlineKeyboardButton("🔄 تحديث الرادار", callback_data="radar_status"))
+        markup.add(InlineKeyboardButton("🔙 رجوع للقائمة", callback_data="server_status")) 
+
+        bot.edit_message_text(text, chat_id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
+
+    # ==========================================
+    # 2️⃣ اللوحة الاستخباراتية (تفاصيل المشترك عند الضغط عليه)
+    # ==========================================
+    @bot.callback_query_handler(func=lambda call: call.data.startswith("ruser_"))
+    def show_user_radar_details(call):
+        chat_id = call.message.chat.id
+        email = call.data.split("ruser_")[1]
         
-        if online_users:
-            text += "🟢 **متصل الآن:**\n" + "\n".join(online_users) + "\n\n"
-        if today_users:
-            text += "🟡 **كان متصل اليوم:**\n" + "\n".join(today_users) + "\n\n"
-        if offline_users:
-            text += "🔴 **غير متصل (خامل):**\n" + "\n".join(offline_users) + "\n"
+        stats = get_full_radar_stats(email)
+        if not stats:
+            bot.answer_callback_query(call.id, "❌ لا توجد بيانات لهذا المشترك حالياً!")
+            return
+        
+        last_seen = stats["last_seen"] or "لم يتصل أبداً"
+        
+        # حساب حالة الاتصال للجمالية (Emoji)
+        status_emoji = "🔴 لم يتصل"
+        if stats["last_seen"]:
+            now = datetime.now()
+            last_seen_dt = datetime.strptime(stats["last_seen"], "%Y-%m-%d %H:%M:%S")
+            diff = (now - last_seen_dt).total_seconds()
             
-        if not online_users and not today_users and not offline_users:
-            text += "📭 لا يوجد مشتركون فعالون حالياً."
+            if diff <= 120:
+                status_emoji = "🟢 متصل الآن"
+                last_seen = "الآن (نشط)"
+            elif diff <= 86400:
+                status_emoji = "🟡 كان متصل اليوم"
+            else:
+                status_emoji = "🔴 غير متصل"
+
+        # ترتيب رسالة التفاصيل
+        text = f"🕵️‍♂️ **اللوحة الاستخباراتية للمشترك:** `{email}`\n"
+        text += f"━━━━━━━━━━━━━━━━━\n"
+        text += f"📡 **حالة الاتصال:** {status_emoji}\n"
+        text += f"👁️ **آخر ظهور:** `{last_seen}`\n\n"
+        
+        text += f"⏳ **إجمالي وقت الاتصال (منذ الإنشاء):**\n└ `{format_duration(stats['total_seconds'])}`\n\n"
+        text += f"📅 **وقت الاتصال لليوم:**\n└ `{format_duration(stats['today_seconds'])}`\n"
+        text += f"━━━━━━━━━━━━━━━━━\n"
+        
+        # جلب أرشيف الأيام السابقة
+        if stats["history"]:
+            text += "🗂️ **أرشيف الأيام السابقة:**\n"
+            for record in stats["history"][:7]: # نعرض آخر 7 أيام حتى الرسالة تكون مرتبة
+                text += f"▪️ `{record['date']}` ⬅️ {format_duration(record['seconds'])}\n"
+        else:
+            text += "📭 لا يوجد أرشيف لأيام سابقة."
 
         markup = InlineKeyboardMarkup()
-        markup.add(InlineKeyboardButton("🔄 تحديث الرادار", callback_data="radar_status"))
-        # تعديل رجوع ليتطابق مع زر القائمة الرئيسية في البوت الخاص بك
-        markup.add(InlineKeyboardButton("🔙 رجوع للقائمة", callback_data="server_status")) 
+        markup.add(InlineKeyboardButton("🔄 تحديث بيانات المشترك", callback_data=f"ruser_{email}"))
+        markup.add(InlineKeyboardButton("🔙 رجوع للرادار", callback_data="radar_status"))
 
         bot.edit_message_text(text, chat_id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
