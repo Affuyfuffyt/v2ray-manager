@@ -30,9 +30,6 @@ def register_radar_handlers(bot):
         chat_id = call.message.chat.id
         
         try:
-            # 🔥 هذا السطر يوقف التحميل (الدائرة اللي تفتر بالزر) فوراً 🔥
-            bot.answer_callback_query(call.id)
-            
             active_users = get_active_users()
             markup = InlineKeyboardMarkup(row_width=1)
             now = datetime.now()
@@ -50,7 +47,6 @@ def register_radar_handlers(bot):
                     email = str(user[0])
                     stats = get_full_radar_stats(email)
                     
-                    # حماية من الأخطاء: إذا المشترك جديد وما عنده بيانات
                     if not stats or not stats.get("last_seen") or stats["last_seen"] == "None" or stats["last_seen"] == "NULL":
                         offline_btns.append(InlineKeyboardButton(f"🔴 {email} (خامل)", callback_data=f"ruser_{email}"))
                         offline_count += 1
@@ -58,7 +54,6 @@ def register_radar_handlers(bot):
                         
                     last_seen_str = str(stats["last_seen"])
                     
-                    # حماية ضد أخطاء صيغة الوقت
                     try:
                         last_seen_dt = datetime.strptime(last_seen_str, "%Y-%m-%d %H:%M:%S")
                         diff = (now - last_seen_dt).total_seconds()
@@ -77,7 +72,6 @@ def register_radar_handlers(bot):
                         offline_btns.append(InlineKeyboardButton(f"🔴 {email} (غير متصل)", callback_data=f"ruser_{email}"))
                         offline_count += 1
                 except Exception as inner_e:
-                    print(f"Error processing user {user}: {inner_e}")
                     continue
 
             for btn in online_btns: markup.add(btn)
@@ -94,10 +88,15 @@ def register_radar_handlers(bot):
             markup.add(InlineKeyboardButton("🔙 رجوع للقائمة", callback_data="server_status")) 
 
             bot.edit_message_text(text, chat_id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
+            bot.answer_callback_query(call.id, "✅ تم التحديث")
             
         except Exception as e:
-            # 🔥 إذا صار أي خطأ مخفي، البوت راح يفضحه ويدزه برسالة كدامك 🔥
-            bot.send_message(chat_id, f"⚠️ حدث خطأ غير متوقع في الرادار:\n`{str(e)}`", parse_mode="Markdown")
+            error_msg = str(e).lower()
+            # 🔥 الحل السحري لخطأ التلجرام: إذا ماكو تغيير بالبيانات، تجاهل الخطأ 🔥
+            if "message is not modified" in error_msg:
+                bot.answer_callback_query(call.id, "✅ اللوحة محدثة بالفعل (لا يوجد تغيير).")
+            else:
+                bot.send_message(chat_id, f"⚠️ حدث خطأ غير متوقع:\n`{str(e)}`", parse_mode="Markdown")
 
     # ==========================================
     # 2️⃣ اللوحة الاستخباراتية (تفاصيل المشترك)
@@ -108,7 +107,6 @@ def register_radar_handlers(bot):
         email = call.data.split("ruser_")[1]
         
         try:
-            bot.answer_callback_query(call.id)
             stats = get_full_radar_stats(email)
             if not stats:
                 bot.answer_callback_query(call.id, "❌ لا توجد بيانات لهذا المشترك حالياً!")
@@ -156,6 +154,11 @@ def register_radar_handlers(bot):
             markup.add(InlineKeyboardButton("🔙 رجوع للرادار", callback_data="radar_status"))
 
             bot.edit_message_text(text, chat_id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
+            bot.answer_callback_query(call.id, "✅ تم التحديث")
             
         except Exception as e:
-            bot.send_message(chat_id, f"⚠️ خطأ في تفاصيل المشترك:\n`{str(e)}`", parse_mode="Markdown")
+            error_msg = str(e).lower()
+            if "message is not modified" in error_msg:
+                bot.answer_callback_query(call.id, "✅ البيانات محدثة بالفعل.")
+            else:
+                bot.send_message(chat_id, f"⚠️ خطأ في التفاصيل:\n`{str(e)}`", parse_mode="Markdown")
