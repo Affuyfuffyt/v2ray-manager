@@ -9,7 +9,7 @@ DB_PATH = f'{home_dir}/v2ray_manager/bot_data.db'
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    # 1. جدول المشتركين (تمت إضافة حقول الرادار له بدون مسح القديم)
+    # 1. جدول المشتركين
     c.execute('''CREATE TABLE IF NOT EXISTS users
                  (email TEXT PRIMARY KEY, uuid TEXT, port INTEGER, quota_bytes REAL, expiry_date TEXT, status TEXT)''')
                  
@@ -18,17 +18,16 @@ def init_db():
                  (email TEXT, date TEXT, total_used REAL)''')
                  
     # 🔥 التحديثات الجديدة للرادار 🔥
-    # إضافة حقول (آخر ظهور) و (الوقت الكلي) للمشتركين القدامى بأمان
     try:
         c.execute("ALTER TABLE users ADD COLUMN last_seen TEXT")
     except:
-        pass # الحقل موجود مسبقاً
+        pass 
     try:
         c.execute("ALTER TABLE users ADD COLUMN total_connection_seconds REAL DEFAULT 0")
     except:
-        pass # الحقل موجود مسبقاً
+        pass 
 
-    # 🔥 3. جدول أرشيف وقت الاتصال اليومي (جديد كلياً للوحة الشاملة) 🔥
+    # 🔥 3. جدول أرشيف وقت الاتصال اليومي
     c.execute('''CREATE TABLE IF NOT EXISTS daily_connection
                  (email TEXT, date TEXT, connection_seconds REAL, PRIMARY KEY (email, date))''')
 
@@ -38,13 +37,11 @@ def init_db():
 def add_user(email, uuid, port, quota_bytes, expiry_date):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    # نتحقق إذا المشترك موجود، نحدث بس بياناته الأساسية (حتى ما نصفر وقت الرادار من نمددله)
     c.execute("SELECT email FROM users WHERE email=?", (email,))
     if c.fetchone():
         c.execute("UPDATE users SET uuid=?, port=?, quota_bytes=?, expiry_date=?, status='active' WHERE email=?",
                   (uuid, port, quota_bytes, str(expiry_date), email))
     else:
-        # إذا مشترك جديد، ينزل مع تصفير إعدادات الرادار
         c.execute("INSERT INTO users (email, uuid, port, quota_bytes, expiry_date, status, last_seen, total_connection_seconds) VALUES (?, ?, ?, ?, ?, ?, NULL, 0)", 
                   (email, uuid, port, quota_bytes, str(expiry_date), 'active'))
     conn.commit()
@@ -57,71 +54,6 @@ def get_all_users():
     users = [row[0] for row in c.fetchall()]
     conn.close()
     return users
-
-# ==========================================
-# 📡 دوال الرادار الجديدة (اللوحة الشاملة) 📡
-# ==========================================
-
-# دالة تحديث الرادار (تشتغل كل دقيقة بالخلفية)
-def update_radar_data(email):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    today_str = str(datetime.date.today())
-
-    # 1. تحديث المستخدم (آخر ظهور + الوقت الكلي)
-    c.execute("UPDATE users SET last_seen=?, total_connection_seconds = COALESCE(total_connection_seconds, 0) + 60 WHERE email=?", (now_str, email))
-    
-    # 2. تحديث أرشيف اليوم بالجدول الجديد (تضيف 60 ثانية)
-    c.execute("INSERT INTO daily_connection (email, date, connection_seconds) VALUES (?, ?, 60) ON CONFLICT(email, date) DO UPDATE SET connection_seconds = connection_seconds + 60", (email, today_str))
-
-    conn.commit()
-    conn.close()
-
-# دالة جلب كل تفاصيل المشترك للرادار الشامل
-def get_full_radar_stats(email):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-
-    # جلب (آخر ظهور) و (الوقت الكلي)
-    c.execute("SELECT last_seen, total_connection_seconds FROM users WHERE email=?", (email,))
-    user_data = c.fetchone()
-
-    if not user_data:
-        conn.close()
-        return None
-
-    last_seen, total_sec = user_data
-    total_sec = total_sec or 0
-
-    # جلب أرشيف الأيام كلها لهذا المشترك
-    c.execute("SELECT date, connection_seconds FROM daily_connection WHERE email=? ORDER BY date DESC", (email,))
-    history = c.fetchall()
-    
-    conn.close()
-
-    today_str = str(datetime.date.today())
-    today_sec = 0
-    archive = []
-
-    # فصل استهلاك اليوم عن أرشيف الأيام السابقة
-    for row in history:
-        date_str, sec = row
-        if date_str == today_str:
-            today_sec = sec
-        else:
-            archive.append({"date": date_str, "seconds": sec})
-
-    return {
-        "last_seen": last_seen,
-        "total_seconds": total_sec,
-        "today_seconds": today_sec,
-        "history": archive
-    }
-
-# ==========================================
-# 🔥 دوال المراقب والطرد التلقائي 🔥
-# ==========================================
 
 def get_active_users():
     conn = sqlite3.connect(DB_PATH)
@@ -139,7 +71,63 @@ def set_user_expired(email):
     conn.close()
 
 # ==========================================
-# 📊 دوال الإحصائيات مال البيانات (البايتات)
+# 📡 دوال الرادار الجديدة (اللوحة الشاملة) 📡
+# ==========================================
+
+def update_radar_data(email):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    today_str = str(datetime.date.today())
+
+    # 1. تحديث المستخدم (آخر ظهور + الوقت الكلي)
+    c.execute("UPDATE users SET last_seen=?, total_connection_seconds = COALESCE(total_connection_seconds, 0) + 60 WHERE email=?", (now_str, email))
+    
+    # 2. تحديث أرشيف اليوم
+    c.execute("INSERT INTO daily_connection (email, date, connection_seconds) VALUES (?, ?, 60) ON CONFLICT(email, date) DO UPDATE SET connection_seconds = connection_seconds + 60", (email, today_str))
+
+    conn.commit()
+    conn.close()
+
+def get_full_radar_stats(email):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+
+    c.execute("SELECT last_seen, total_connection_seconds FROM users WHERE email=?", (email,))
+    user_data = c.fetchone()
+
+    if not user_data:
+        conn.close()
+        return None
+
+    last_seen, total_sec = user_data
+    total_sec = total_sec or 0
+
+    c.execute("SELECT date, connection_seconds FROM daily_connection WHERE email=? ORDER BY date DESC", (email,))
+    history = c.fetchall()
+    
+    conn.close()
+
+    today_str = str(datetime.date.today())
+    today_sec = 0
+    archive = []
+
+    for row in history:
+        date_str, sec = row
+        if date_str == today_str:
+            today_sec = sec
+        else:
+            archive.append({"date": date_str, "seconds": sec})
+
+    return {
+        "last_seen": last_seen,
+        "total_seconds": total_sec,
+        "today_seconds": today_sec,
+        "history": archive
+    }
+
+# ==========================================
+# 📊 دوال الإحصائيات (البيانات)
 # ==========================================
 
 def log_daily_usage(email, total_used_bytes):
