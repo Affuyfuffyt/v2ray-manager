@@ -10,8 +10,9 @@ import threading
 import os 
 import urllib.parse 
 
-# 👇 التصحيح هنا: استدعاء كل الدوال من ملف database.py الموحد حتى ما يكرش البوت
-from database import save_user, add_user, get_active_users, set_user_expired 
+# 👇 التصحيح الجذري هنا: فصلنا استدعاء قواعد البيانات حتى الرادار يقرأ المشترك الجديد فوراً
+from database import save_user
+from db import add_user, get_active_users, set_user_expired 
 
 # قاموس لحفظ بيانات الإنشاء المؤقتة
 creation_data = {}
@@ -416,7 +417,7 @@ def register_create_handlers(bot):
 
         add_client_to_config(data['name'], data['uuid'], protocol)
 
-        # الحفظ المزدوج (قاعدة بيانات وحدة بعد الدمج)
+        # 🚀 الحفظ المزدوج المطور: الآن يحفظ بالـ JSON وبنفس الوقت يبلغ الرادار 🚀
         try:
             save_user(data['name'], data['uuid'], data['quota_bytes'], expiry_time)
             selected_port = data.get('port', 443)
