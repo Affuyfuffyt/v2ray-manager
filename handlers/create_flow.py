@@ -4,15 +4,15 @@ import random
 import string
 import json
 import base64
-import time 
-import requests 
-import threading 
-import os 
-import urllib.parse 
+import time
+import requests
+import threading
+import os
+import urllib.parse
 
 # 👇 التصحيح الجذري هنا: فصلنا استدعاء قواعد البيانات حتى الرادار يقرأ المشترك الجديد فوراً
 from database import save_user
-from db import add_user, get_active_users, set_user_expired 
+from db import add_user, get_active_users, set_user_expired
 
 # قاموس لحفظ بيانات الإنشاء المؤقتة
 creation_data = {}
