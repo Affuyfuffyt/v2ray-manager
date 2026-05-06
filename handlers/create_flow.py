@@ -10,9 +10,9 @@ import threading
 import os
 import urllib.parse
 
-# 👇 فصلنا استدعاء قواعد البيانات حتى الرادار يقرأ المشترك الجديد فوراً
+# 👇 استدعاء جميع الدوال بما فيها دوال نظام الدعوات
 from database import save_user
-from db import add_user, get_active_users, set_user_expired
+from db import add_user, get_active_users, set_user_expired, get_user_by_ref_code, extend_user_expiry, assign_ref_code
 
 # قاموس لحفظ بيانات الإنشاء المؤقتة
 creation_data = {}
@@ -64,7 +64,7 @@ def add_client_to_config(user_name, uuid_val, protocol):
         print(f"Error adding to config: {e}")
 
 # ==========================================
-# 🗑️ دالة حذف المشترك المنتهي من ملف Xray يدوياً (لضمان طرده)
+# 🗑️ دالة حذف المشترك المنتهي
 # ==========================================
 def remove_client_from_config(uuid_val):
     try:
@@ -91,7 +91,7 @@ def remove_client_from_config(uuid_val):
         print(f"Error removing from config: {e}")
 
 # ==========================================
-# 🔄 دالة موحدة لعمل ريستارت للسيرفر عبر Alwaysdata API
+# 🔄 دالة عمل ريستارت للسيرفر
 # ==========================================
 def restart_alwaysdata(bot=None, chat_id=None, success_msg=None, fail_msg=None):
     try:
@@ -118,7 +118,7 @@ def restart_alwaysdata(bot=None, chat_id=None, success_msg=None, fail_msg=None):
     return False
 
 # ==========================================
-# ⏱️ دالة العداد التنازلي لطرد المشترك بالخلفية
+# ⏱️ العداد التنازلي لطرد المشترك
 # ==========================================
 def auto_restart_on_expiry(bot, chat_id, expiry_time, user_name, uuid_val, protocol):
     wait_seconds = expiry_time - time.time()
@@ -142,7 +142,7 @@ def auto_restart_on_expiry(bot, chat_id, expiry_time, user_name, uuid_val, proto
 
 
 # ==========================================
-# 👁️ مراقب قاعدة البيانات الدائم (Watchdog)
+# 👁️ مراقب قاعدة البيانات الدائم
 # ==========================================
 def database_expiry_watchdog(bot):
     admin_id = None
@@ -194,16 +194,98 @@ def register_create_handlers(bot):
         msg = bot.send_message(chat_id, "📝 أرسل اسم المشترك (باللغة الإنجليزية وبدون مسافات):")
         bot.register_next_step_handler(msg, process_name, bot)
 
+    # ==========================================
+    # 🎁 نظام دعوات المشتركين والمكافآت 🎁
+    # ==========================================
     def process_name(message, bot):
         chat_id = message.chat.id
-        creation_data[chat_id] = {'name': message.text}
+        creation_data[chat_id] = {'name': message.text.strip()}
+        
+        markup = InlineKeyboardMarkup()
+        markup.add(InlineKeyboardButton("⏭️ تخطي كود الدعوة", callback_data="skip_referral"))
+        msg = bot.send_message(chat_id, "🎁 **نظام المكافآت والدعوات:**\nإذا كان المشترك قادماً عن طريق شخص آخر، أرسل (كود دعوة) الشخص الداعي الآن ليتم مكافأته.\n\n👇 أو اضغط تخطي للاستمرار:", reply_markup=markup, parse_mode="Markdown")
+        bot.register_next_step_handler(msg, check_referral_text, bot)
+
+    @bot.callback_query_handler(func=lambda call: call.data == "skip_referral")
+    def skip_ref(call):
+        chat_id = call.message.chat.id
+        bot.clear_step_handler_by_chat_id(chat_id) # إلغاء انتظار الكود
+        ask_protocol(chat_id, bot, call.message.message_id)
+
+    def check_referral_text(message, bot):
+        chat_id = message.chat.id
+        ref_code = message.text.strip()
+        referrer = get_user_by_ref_code(ref_code)
+
+        if referrer:
+            referrer_email = referrer[0]
+            creation_data[chat_id]['referrer'] = referrer_email
+
+            markup = InlineKeyboardMarkup(row_width=2)
+            markup.add(
+                InlineKeyboardButton("تمديد 5 أيام 🎁", callback_data="rew_5"),
+                InlineKeyboardButton("تمديد 10 أيام 🎁", callback_data="rew_10"),
+                InlineKeyboardButton("تمديد 30 يوم 🎁", callback_data="rew_30"),
+                InlineKeyboardButton("إدخال يدوي ✍️", callback_data="rew_manual"),
+                InlineKeyboardButton("إلغاء التمديد والتخطي ⏭️", callback_data="skip_referral")
+            )
+            bot.send_message(chat_id, f"✅ **كود صحيح!**\nهذا الكود يعود للمشترك: `{referrer_email}`\n\nاختر كم تريد أن تمدد صلاحيته كمكافأة للدعوة:", reply_markup=markup, parse_mode="Markdown")
+        else:
+            markup = InlineKeyboardMarkup()
+            markup.add(InlineKeyboardButton("⏭️ الاستمرار بدون مكافأة (تخطي)", callback_data="skip_referral"))
+            msg = bot.send_message(chat_id, "❌ كود الدعوة غير صحيح أو غير موجود!\nتأكد من الكود وأرسله مجدداً، أو اضغط تخطي:", reply_markup=markup)
+            bot.register_next_step_handler(msg, check_referral_text, bot)
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith("rew_"))
+    def process_reward(call):
+        chat_id = call.message.chat.id
+        choice = call.data.split('_')[1]
+
+        if choice == "manual":
+            bot.clear_step_handler_by_chat_id(chat_id)
+            msg = bot.send_message(chat_id, "✍️ أرسل مدة التمديد (مثال: 5h لساعات، 10d لأيام، 1m لشهر):")
+            bot.register_next_step_handler(msg, manual_reward_input, bot)
+        else:
+            days = int(choice)
+            apply_reward(chat_id, bot, days * 86400)
+
+    def manual_reward_input(message, bot):
+        chat_id = message.chat.id
+        text = message.text.lower().strip()
+        if text.endswith('h'): sec = int(text[:-1]) * 3600
+        elif text.endswith('d'): sec = int(text[:-1]) * 86400
+        elif text.endswith('m'): sec = int(text[:-1]) * 86400 * 30
+        else:
+            msg = bot.send_message(chat_id, "❌ صيغة خاطئة! حاول مجدداً (مثال: 5h, 10d, 1m):")
+            bot.register_next_step_handler(msg, manual_reward_input, bot)
+            return
+        apply_reward(chat_id, bot, sec)
+
+    def apply_reward(chat_id, bot, seconds):
+        referrer_email = creation_data[chat_id].get('referrer')
+        if referrer_email:
+            extend_user_expiry(referrer_email, seconds)
+            bot.send_message(chat_id, f"🎉 **تمت المكافأة!**\nتم تمديد صلاحية المشترك الداعي `{referrer_email}` بنجاح.", parse_mode="Markdown")
+        ask_protocol(chat_id, bot)
+
+    # ==========================================
+    # إكمال عملية الإنشاء الطبيعية
+    # ==========================================
+    def ask_protocol(chat_id, bot, message_id=None):
         markup = InlineKeyboardMarkup(row_width=3)
         markup.add(
             InlineKeyboardButton("VLESS", callback_data="proto_vless"),
             InlineKeyboardButton("VMESS", callback_data="proto_vmess"),
             InlineKeyboardButton("Trojan", callback_data="proto_trojan")
         )
-        bot.send_message(chat_id, "🌐 اختر البروتوكول:", reply_markup=markup)
+        text = "🌐 اختر البروتوكول:"
+        if message_id:
+            try:
+                bot.edit_message_text(text, chat_id, message_id, reply_markup=markup)
+            except:
+                bot.send_message(chat_id, text, reply_markup=markup)
+        else:
+            bot.send_message(chat_id, text, reply_markup=markup)
 
     @bot.callback_query_handler(func=lambda call: call.data.startswith("proto_"))
     def process_protocol(call):
@@ -416,18 +498,25 @@ def register_create_handlers(bot):
 
         add_client_to_config(data['name'], data['uuid'], protocol)
 
-        # 🔥 1. الحفظ بقاعدة البيانات القديمة (JSON) 🔥
+        # 1. الحفظ بقاعدة البيانات القديمة (JSON)
         try:
             save_user(data['name'], data['uuid'], data['quota_bytes'], expiry_time)
         except Exception as e:
             print(f"Error saving to old DB: {e}")
 
-        # 🔥 2. الحفظ بقاعدة بيانات الرادار (SQLite) حتى يظهر بالرادار كـ خامل 🔥
+        # 2. الحفظ بقاعدة بيانات الرادار (SQLite)
         try:
             selected_port = data.get('port', 443)
             add_user(data['name'], data['uuid'], selected_port, data['quota_bytes'], expiry_time)
         except Exception as e:
             print(f"Error saving to Radar DB: {e}")
+
+        # 🔥 توليد وحفظ كود دعوة خاص للمشترك الجديد 🔥
+        new_ref_code = "REF-" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=5))
+        try:
+            assign_ref_code(data['name'], new_ref_code)
+        except Exception as e:
+            pass
 
         threading.Thread(
             target=auto_restart_on_expiry, 
@@ -487,6 +576,7 @@ def register_create_handlers(bot):
 👥 **الأجهزة المتصلة:** `{data['ips']}`
 ⏳ **المدة:** `{data['duration_str']}`
 📊 **السعة:** `{quota_display}`
+🎁 **كود الدعوة الخاص به:** `{new_ref_code}` (يستخدمه لدعوة أصدقائه)
 
 🔗 **انسخ الكود أدناه والصقه في تطبيق (DarkTunnel أو v2rayNG):**
 `{final_link}`
