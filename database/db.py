@@ -1,166 +1,58 @@
-import sqlite3
-import datetime
+import json
 import os
+import time
 
-# تحديد مسار قاعدة البيانات ليكون دائم وما يضيع
-home_dir = os.path.expanduser("~")
-DB_PATH = f'{home_dir}/v2ray_manager/bot_data.db'
+# مسار ملف JSON
+def get_db_path():
+    home_dir = os.path.expanduser("~")
+    # البحث عن اسم ملف البيانات القديم (حتى نتأكد من مساره)
+    for json_name in ["database.json", "data.json", "users.json"]:
+        json_path = os.path.join(home_dir, "v2ray_manager", json_name)
+        if os.path.exists(json_path):
+            return json_path
+    # إذا ما لكاه، يرجع الافتراضي
+    return os.path.join(home_dir, "v2ray_manager", "database.json")
 
-def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    # 1. جدول المشتركين (مع الحفاظ على القديم)
-    c.execute('''CREATE TABLE IF NOT EXISTS users
-                 (email TEXT PRIMARY KEY, uuid TEXT, port INTEGER, quota_bytes REAL, expiry_date TEXT, status TEXT)''')
-                 
-    # 2. جدول الاستهلاك اليومي للبيانات
-    c.execute('''CREATE TABLE IF NOT EXISTS daily_usage
-                 (email TEXT, date TEXT, total_used REAL)''')
-                 
-    # 🔥 التحديثات الجديدة للرادار (آخر ظهور + الوقت) 🔥
+def load_db():
+    db_path = get_db_path()
+    if os.path.exists(db_path):
+        try:
+            with open(db_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+def update_db(data):
+    db_path = get_db_path()
     try:
-        c.execute("ALTER TABLE users ADD COLUMN last_seen TEXT")
-    except:
-        pass 
-    try:
-        c.execute("ALTER TABLE users ADD COLUMN total_connection_seconds REAL DEFAULT 0")
-    except:
-        pass 
+        with open(db_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=4)
+    except Exception as e:
+        print(f"Error saving DB: {e}")
 
-    # 🔥 3. جدول أرشيف وقت الاتصال اليومي (للوحة الشاملة) 🔥
-    c.execute('''CREATE TABLE IF NOT EXISTS daily_connection
-                 (email TEXT, date TEXT, connection_seconds REAL, PRIMARY KEY (email, date))''')
-
-    conn.commit()
-    conn.close()
-
-def add_user(email, uuid, port, quota_bytes, expiry_date):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    # نتحقق إذا المشترك موجود نحدث بس بياناته
-    c.execute("SELECT email FROM users WHERE email=?", (email,))
-    if c.fetchone():
-        c.execute("UPDATE users SET uuid=?, port=?, quota_bytes=?, expiry_date=?, status='active' WHERE email=?",
-                  (uuid, port, quota_bytes, str(expiry_date), email))
-    else:
-        # إذا مشترك جديد، ينزل مع تصفير إعدادات الرادار
-        c.execute("INSERT INTO users (email, uuid, port, quota_bytes, expiry_date, status, last_seen, total_connection_seconds) VALUES (?, ?, ?, ?, ?, ?, NULL, 0)", 
-                  (email, uuid, port, quota_bytes, str(expiry_date), 'active'))
-    conn.commit()
-    conn.close()
-
-def get_all_users():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT email FROM users")
-    users = [row[0] for row in c.fetchall()]
-    conn.close()
-    return users
-
-# ==========================================
-# 🔥 دوال المراقب والطرد التلقائي 🔥
-# ==========================================
-
-def get_active_users():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT email, uuid, expiry_date FROM users WHERE status='active'")
-    users = c.fetchall()
-    conn.close()
-    return users
-
-def set_user_expired(email):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("UPDATE users SET status='expired' WHERE email=?", (email,))
-    conn.commit()
-    conn.close()
-
-# ==========================================
-# 📡 دوال الرادار الجديدة (اللوحة الشاملة) 📡
-# ==========================================
-
-# دالة تحديث الرادار (تشتغل كل دقيقة بالخلفية)
-def update_radar_data(email):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    today_str = str(datetime.date.today())
-
-    # تحديث المستخدم (آخر ظهور + الوقت الكلي)
-    c.execute("UPDATE users SET last_seen=?, total_connection_seconds = COALESCE(total_connection_seconds, 0) + 60 WHERE email=?", (now_str, email))
-    
-    # تحديث أرشيف اليوم بالجدول الجديد
-    c.execute("INSERT INTO daily_connection (email, date, connection_seconds) VALUES (?, ?, 60) ON CONFLICT(email, date) DO UPDATE SET connection_seconds = connection_seconds + 60", (email, today_str))
-
-    conn.commit()
-    conn.close()
-
-# دالة جلب كل تفاصيل المشترك للرادار الشامل
-def get_full_radar_stats(email):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-
-    c.execute("SELECT last_seen, total_connection_seconds FROM users WHERE email=?", (email,))
-    user_data = c.fetchone()
-
-    if not user_data:
-        conn.close()
-        return None
-
-    last_seen, total_sec = user_data
-    total_sec = total_sec or 0
-
-    c.execute("SELECT date, connection_seconds FROM daily_connection WHERE email=? ORDER BY date DESC", (email,))
-    history = c.fetchall()
-    
-    conn.close()
-
-    today_str = str(datetime.date.today())
-    today_sec = 0
-    archive = []
-
-    for row in history:
-        date_str, sec = row
-        if date_str == today_str:
-            today_sec = sec
-        else:
-            archive.append({"date": date_str, "seconds": sec})
-
-    return {
-        "last_seen": last_seen,
-        "total_seconds": total_sec,
-        "today_seconds": today_sec,
-        "history": archive
+def save_user(email, uuid_val, quota_bytes, expiry_time):
+    db_data = load_db()
+    db_data[email] = {
+        'uuid': uuid_val,
+        'limit_bytes': quota_bytes,
+        'expiry_time': expiry_time,
+        'used_bytes': 0,
+        'is_active': True,
+        'created_at': time.time()
     }
+    update_db(db_data)
 
-# ==========================================
-# 📊 دوال الإحصائيات مال البيانات (البايتات)
-# ==========================================
-
-def log_daily_usage(email, total_used_bytes):
-    today = str(datetime.date.today())
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("INSERT INTO daily_usage VALUES (?, ?, ?)", (email, today, total_used_bytes))
-    conn.commit()
-    conn.close()
-
-def get_usage_stats(email, current_total_used):
-    today = str(datetime.date.today())
-    yesterday = str(datetime.date.today() - datetime.timedelta(days=1))
-    
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    
-    c.execute("SELECT total_used FROM daily_usage WHERE email=? AND date=?", (email, yesterday))
-    y_data = c.fetchone()
-    used_yesterday_total = y_data[0] if y_data else 0
-    
-    used_today = current_total_used - used_yesterday_total if current_total_used > used_yesterday_total else current_total_used
-    
-    conn.close()
-    return used_today, used_yesterday_total
-
-# 🔥 تشغيل التأسيس تلقائياً بمجرد استدعاء الملف حتى ما تصير أي أخطاء بالرادار 🔥
-init_db()
+# 🔥 هاي الدالة السحرية الجديدة اللي راح تخلي التمديد يظهر بلوحة التفاصيل 🔥
+def extend_json_expiry(email, extra_seconds):
+    db_data = load_db()
+    if email in db_data:
+        # نبحث عن حقل الوقت الصحيح ونحدثه
+        for key in ['expiry_time', 'expiry_date', 'expiry']:
+            if key in db_data[email]:
+                current_val = float(db_data[email][key])
+                db_data[email][key] = current_val + extra_seconds
+                db_data[email]['is_active'] = True # نرجع نفعله إذا كان طافي
+                update_db(db_data)
+                return True
+    return False
