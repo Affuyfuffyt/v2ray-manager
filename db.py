@@ -28,6 +28,12 @@ def init_db():
     except:
         pass # الحقل موجود مسبقاً
 
+    # 🔥 التحديث الجديد لنظام أكواد الدعوة 🔥
+    try:
+        c.execute("ALTER TABLE users ADD COLUMN ref_code TEXT")
+    except:
+        pass # الحقل موجود مسبقاً
+
     # 🔥 3. جدول أرشيف وقت الاتصال اليومي (جديد كلياً للوحة الشاملة) 🔥
     c.execute('''CREATE TABLE IF NOT EXISTS daily_connection
                  (email TEXT, date TEXT, connection_seconds REAL, PRIMARY KEY (email, date))''')
@@ -44,11 +50,49 @@ def add_user(email, uuid, port, quota_bytes, expiry_date):
         c.execute("UPDATE users SET uuid=?, port=?, quota_bytes=?, expiry_date=?, status='active' WHERE email=?",
                   (uuid, port, quota_bytes, str(expiry_date), email))
     else:
-        # إذا مشترك جديد، ينزل مع تصفير إعدادات الرادار
-        c.execute("INSERT INTO users (email, uuid, port, quota_bytes, expiry_date, status, last_seen, total_connection_seconds) VALUES (?, ?, ?, ?, ?, ?, NULL, 0)", 
+        # إذا مشترك جديد، ينزل مع تصفير إعدادات الرادار وكود الدعوة
+        c.execute("INSERT INTO users (email, uuid, port, quota_bytes, expiry_date, status, last_seen, total_connection_seconds, ref_code) VALUES (?, ?, ?, ?, ?, ?, NULL, 0, NULL)", 
                   (email, uuid, port, quota_bytes, str(expiry_date), 'active'))
     conn.commit()
     conn.close()
+
+# ==========================================
+# 🎁 دوال نظام الدعوات والمكافآت الجديدة 🎁
+# ==========================================
+
+# دالة لربط كود دعوة خاص بالمشترك
+def assign_ref_code(email, ref_code):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("UPDATE users SET ref_code=? WHERE email=?", (ref_code, email))
+    conn.commit()
+    conn.close()
+
+# دالة للبحث عن المشترك صاحب كود الدعوة
+def get_user_by_ref_code(ref_code):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT email, expiry_date FROM users WHERE ref_code=?", (ref_code,))
+    data = c.fetchone()
+    conn.close()
+    return data
+
+# دالة لتمديد وقت المشترك (المكافأة)
+def extend_user_expiry(email, extra_seconds):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT expiry_date FROM users WHERE email=?", (email,))
+    data = c.fetchone()
+    if data and data[0]:
+        current_expiry = float(data[0])
+        new_expiry = current_expiry + extra_seconds
+        c.execute("UPDATE users SET expiry_date=?, status='active' WHERE email=?", (str(new_expiry), email))
+        conn.commit()
+        conn.close()
+        return new_expiry
+    return None
+
+# ==========================================
 
 def get_all_users():
     conn = sqlite3.connect(DB_PATH)
