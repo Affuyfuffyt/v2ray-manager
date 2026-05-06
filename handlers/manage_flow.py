@@ -10,11 +10,17 @@ from datetime import datetime
 from database import load_db, update_db
 from xray_core.panel_api import PanelAPI
 
+# 👇 استدعاء نظام الإشعارات لإبلاغ العميل
+try:
+    from user_notifier import notify_extension
+except ImportError:
+    def notify_extension(bot, email, seconds_added): pass
+
 # قاموس لحفظ بيانات التمديد المؤقتة
 renew_data = {}
 
 # ==========================================
-# 🛠️ دوال العملية الجراحية لملف الكونفك والريستارت (نفس اللي بـ create_flow)
+# 🛠️ دوال العملية الجراحية لملف الكونفك والريستارت
 # ==========================================
 def add_client_to_config(user_name, uuid_val, protocol):
     try:
@@ -242,17 +248,18 @@ def register_manage_handlers(bot):
         choice = call.data.split('_')[1]
         
         if choice == "manual":
-            msg = bot.send_message(chat_id, "✍️ أرسل المدة (مثال: 5m, 2h, 10d):")
+            msg = bot.send_message(chat_id, "✍️ أرسل المدة (مثال: `5m` لدقائق، `2h` لساعات، `10d` لأيام، `1mo` لشهر):", parse_mode="Markdown")
             bot.register_next_step_handler(msg, lambda m: save_rdur_manual(m, bot))
         else:
             renew_data[chat_id]['duration_str'] = choice
             show_renew_quota(chat_id, bot, call.message.message_id)
 
+    # 🔥 تحديث إدخال المدة اليدوية (إضافة الدقائق m والأشهر mo) 🔥
     def save_rdur_manual(message, bot):
         chat_id = message.chat.id
         text = message.text.lower().strip()
-        if not (text.endswith('m') or text.endswith('h') or text.endswith('d') or text.endswith('y') or text.isdigit()):
-            msg = bot.send_message(chat_id, "❌ خطأ! أرسل صيغة صحيحة:")
+        if not (text.endswith('mo') or text.endswith('m') or text.endswith('h') or text.endswith('d') or text.endswith('y') or text.isdigit()):
+            msg = bot.send_message(chat_id, "❌ خطأ! أرسل صيغة صحيحة (مثال: `5m`, `2h`, `10d`, `1mo`):", parse_mode="Markdown")
             bot.register_next_step_handler(msg, lambda m: save_rdur_manual(m, bot))
             return
         renew_data[chat_id]['duration_str'] = text
@@ -295,7 +302,7 @@ def register_manage_handlers(bot):
             msg = bot.send_message(chat_id, "❌ خطأ! أرسل رقماً فقط:")
             bot.register_next_step_handler(msg, lambda m: process_manual_quota(m, bot))
 
-    # 🔥 خطوة جديدة: اختيار البروتوكول لضمان عمل التورجان بعد التمديد 🔥
+    # 🔥 خطوة اختيار البروتوكول لضمان عمل التورجان بعد التمديد 🔥
     def show_protocol_selection(chat_id, bot, message_id=None):
         markup = InlineKeyboardMarkup(row_width=3)
         markup.add(
@@ -321,7 +328,8 @@ def register_manage_handlers(bot):
         new_quota = data['new_quota']
         dur_str = data['duration_str']
         
-        if dur_str.endswith('m'): sec = int(dur_str[:-1]) * 60
+        if dur_str.endswith('mo'): sec = int(dur_str[:-2]) * 86400 * 30
+        elif dur_str.endswith('m'): sec = int(dur_str[:-1]) * 60
         elif dur_str.endswith('h'): sec = int(dur_str[:-1]) * 3600
         elif dur_str.endswith('d'): sec = int(dur_str[:-1]) * 86400
         elif dur_str.endswith('y'): sec = int(dur_str[:-1]) * 86400 * 365
@@ -367,5 +375,8 @@ def register_manage_handlers(bot):
             # 4. ريستارت فوري ليعمل الكود
             time.sleep(1)
             restart_alwaysdata(bot, chat_id, "✅ **تم الريستارت! الكود شغال الآن 100%.** 🚀", "⚠️ التمديد نجح، بس فشل الريستارت التلقائي.")
+            
+            # 5. 🔥 إشعار العميل (المواطن) بالتمديد الجديد! 🔥
+            notify_extension(bot, email, sec)
         
         renew_data.pop(chat_id, None)
