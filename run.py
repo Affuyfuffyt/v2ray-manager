@@ -23,11 +23,15 @@ except ImportError:
 bot = telebot.TeleBot(config.BOT_TOKEN)
 api = PanelAPI()
 
-# 2. إضافة فلتر الحماية (للأدمن فقط)
+# 🔥 التصليح الجذري للفلتر حتى ما يعلك الأزرار (مثل حالة الخادم) 🔥
 class IsAdmin(telebot.custom_filters.SimpleCustomFilter):
     key = 'is_admin'
-    def check(self, message):
-        return str(message.chat.id) == str(config.ADMIN_ID)
+    def check(self, obj):
+        # إذا كانت الضغطة من زر (CallbackQuery)
+        if hasattr(obj, 'message'):
+            return str(obj.message.chat.id) == str(config.ADMIN_ID)
+        # إذا كانت رسالة نصية عادية (Message)
+        return str(obj.chat.id) == str(config.ADMIN_ID)
 
 bot.add_custom_filter(IsAdmin())
 
@@ -88,7 +92,7 @@ speed_test.register_speed_handlers(bot)
 radar_flow.register_radar_handlers(bot)
 user_handlers.register_user_handlers(bot) # تسجيل أزرار واجهة العميل
 
-# 🔥 التحديث الجذري: فتح أمر البداية للكل مع صائد الأخطاء ومطابقة الـ ID 🔥
+# 🔥 فتح أمر البداية للكل مع صائد الأخطاء ومطابقة الـ ID 🔥
 @bot.message_handler(commands=['start'])
 def start_command(message):
     chat_id = message.chat.id
@@ -100,7 +104,6 @@ def start_command(message):
             # توجيه المستخدم العادي
             user_handlers.show_user_main_menu(bot, chat_id)
     except Exception as e:
-        # إذا صار خطأ بملفات المستخدم، البوت ما راح يسكت، راح يدزلك الخطأ
         bot.send_message(chat_id, f"⚠️ عذراً، حدث خطأ داخلي في البوت:\n`{e}`", parse_mode="Markdown")
 
 @bot.callback_query_handler(func=lambda call: call.data == "server_status", is_admin=True)
