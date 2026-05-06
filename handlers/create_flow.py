@@ -10,9 +10,11 @@ import threading
 import os
 import urllib.parse
 
-# 👇 تم إضافة استدعاء extend_json_expiry لتحديث اللوحة
-from database import save_user, extend_json_expiry
-from db import add_user, get_active_users, set_user_expired, get_user_by_ref_code, extend_user_expiry, assign_ref_code
+# 👇 الاستدعاء الموحد: كل الدوال هسه تجي من ملف database.py الجديد فقط
+from database import (
+    save_user, extend_json_expiry, add_user, get_active_users, 
+    set_user_expired, get_user_by_ref_code, extend_user_expiry, assign_ref_code
+)
 
 # قاموس لحفظ بيانات الإنشاء المؤقتة
 creation_data = {}
@@ -261,17 +263,19 @@ def register_create_handlers(bot):
             return
         apply_reward(chat_id, bot, sec)
 
-    # 🔥 التحديث الجذري: هاي الدالة هسه تحدث الرادار (SQLite) واللوحة (JSON) سويه 🔥
+    # 🔥 التحديث المزدوج للرادار (SQLite) واللوحة (JSON) 🔥
     def apply_reward(chat_id, bot, seconds):
         referrer_email = creation_data[chat_id].get('referrer')
         if referrer_email:
-            # 1. تحديث الرادار
+            # 1. تحديث وقت المشترك في الرادار
             extend_user_expiry(referrer_email, seconds)
-            # 2. تحديث اللوحة (حتى يظهر التمديد كدامك بالتفاصيل)
+            
+            # 2. تحديث وقت المشترك في اللوحة (حتى يظهر كدامك بالتفاصيل)
             try:
                 extend_json_expiry(referrer_email, seconds)
-            except:
-                pass
+            except Exception as e:
+                print(f"JSON Reward Error: {e}")
+
             bot.send_message(chat_id, f"🎉 **تمت المكافأة!**\nتم تمديد صلاحية المشترك الداعي `{referrer_email}` بنجاح.", parse_mode="Markdown")
         ask_protocol(chat_id, bot)
 
@@ -509,14 +513,14 @@ def register_create_handlers(bot):
         try:
             save_user(data['name'], data['uuid'], data['quota_bytes'], expiry_time)
         except Exception as e:
-            print(f"Error saving to old DB: {e}")
+            print(f"Error saving to JSON DB: {e}")
 
         # 2. الحفظ بقاعدة بيانات الرادار (SQLite)
         try:
             selected_port = data.get('port', 443)
             add_user(data['name'], data['uuid'], selected_port, data['quota_bytes'], expiry_time)
         except Exception as e:
-            print(f"Error saving to Radar DB: {e}")
+            print(f"Error saving to SQLite DB: {e}")
 
         # 🔥 توليد وحفظ كود دعوة خاص للمشترك الجديد 🔥
         new_ref_code = "REF-" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=5))
@@ -578,9 +582,6 @@ def register_create_handlers(bot):
 👤 **الاسم:** `{data['name']}`
 🌐 **البروتوكول:** `{protocol.upper()}`
 🚪 **البورت:** `{selected_port}`
-🛤️ **المسار:** `{fixed_path}`
-🔑 **المعرف:** `{data['uuid']}`
-👥 **الأجهزة المتصلة:** `{data['ips']}`
 ⏳ **المدة:** `{data['duration_str']}`
 📊 **السعة:** `{quota_display}`
 🎁 **كود الدعوة الخاص به:** `{new_ref_code}` (يستخدمه لدعوة أصدقائه)
