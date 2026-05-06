@@ -1,8 +1,14 @@
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import time
 import datetime
-# استدعاء دوال قاعدة البيانات
-from database import db
+import os
+import json
+
+# استدعاء دوال قاعدة البيانات بطريقة آمنة
+try:
+    import db
+except ImportError:
+    from database import db
 
 def register_user_handlers(bot):
     @bot.callback_query_handler(func=lambda call: call.data == "add_user_sub")
@@ -27,7 +33,7 @@ def process_add_sub(message, bot):
     if success:
         bot.send_message(chat_id, f"✅ **تم إضافة الحساب بنجاح!**\nتم ربط الاشتراك `{email}` بحسابك.", parse_mode="Markdown")
     else:
-        bot.send_message(chat_id, "❌ **عذراً!** إما أن الاسم غير صحيح، أو أنه مربوط بحساب آخر مسبقاً.", parse_mode="Markdown")
+        bot.send_message(chat_id, "❌ **عذراً!** إما أن الاسم غير صحيح، أو أنه مربوط بحسابك مسبقاً.", parse_mode="Markdown")
     
     show_user_main_menu(bot, chat_id)
 
@@ -57,7 +63,27 @@ def show_sub_details(bot, chat_id, email, message_id):
     
     expiry_date, quota_bytes, status, last_seen, total_sec = details
     
-    # حساب الوقت المتبقي
+    # 1. جلب الاستهلاك الفعلي بدقة (من ملف JSON)
+    used_bytes = 0
+    try:
+        home_dir = os.path.expanduser("~")
+        for json_name in ["users_db.json", "database.json", "data.json"]:
+            db_path = os.path.join(home_dir, "v2ray_manager", json_name)
+            if os.path.exists(db_path):
+                with open(db_path, 'r', encoding='utf-8') as f:
+                    db_data = json.load(f)
+                    if email in db_data:
+                        used_bytes = db_data[email].get('used_bytes', 0)
+                        break
+    except:
+        pass
+        
+    used_gb = used_bytes / (1024**3)
+    used_mb = used_bytes / (1024**2)
+    used_str = f"{used_gb:.2f} GB" if used_gb >= 1 else f"{used_mb:.2f} MB"
+    quota_str = "بلا حدود ♾️" if quota_bytes == 0 else f"{quota_bytes / (1024**3):.2f} GB"
+
+    # 2. حساب الوقت المتبقي
     now = time.time()
     expiry_time = float(expiry_date)
     time_left = expiry_time - now
@@ -70,12 +96,8 @@ def show_sub_details(bot, chat_id, email, message_id):
         hours = int((time_left % 86400) // 3600)
         time_str = f"{days} يوم و {hours} ساعة"
         status_icon = "🟢 نشط" if status == 'active' else "🔴 متوقف"
-
-    # حساب الاستهلاك
-    usage_data = db.get_usage_stats(email, 0) # نجلب الاستهلاك
-    quota_str = "بلا حدود ♾️" if quota_bytes == 0 else f"{quota_bytes / (1024**3):.2f} GB"
     
-    # فورمات الوقت الكلي
+    # 3. فورمات الوقت الكلي
     total_hours = int(total_sec // 3600)
     total_mins = int((total_sec % 3600) // 60)
     
@@ -87,7 +109,7 @@ def show_sub_details(bot, chat_id, email, message_id):
     text += f"⏳ **الوقت المتبقي:** {time_str}\n"
     text += f"📅 **موعد الانتهاء:** {datetime.datetime.fromtimestamp(expiry_time).strftime('%Y-%m-%d %H:%M')}\n"
     text += f"━━━━━━━━━━━━━━━━━━\n"
-    text += f"💾 **السعة الإجمالية:** {quota_str}\n"
+    text += f"📉 **الاستهلاك:** `{used_str}` من أصل `{quota_str}`\n"
     text += f"━━━━━━━━━━━━━━━━━━\n"
     text += f"📡 **آخر ظهور:** {last_seen_str}\n"
     text += f"⏱️ **إجمالي وقت التشغيل:** {total_hours} ساعة و {total_mins} دقيقة\n"
