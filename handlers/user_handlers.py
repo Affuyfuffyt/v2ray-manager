@@ -1,0 +1,100 @@
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+import time
+import datetime
+# استدعاء دوال قاعدة البيانات
+from database import db
+
+def register_user_handlers(bot):
+    @bot.callback_query_handler(func=lambda call: call.data == "add_user_sub")
+    def add_sub_callback(call):
+        msg = bot.send_message(call.message.chat.id, "📝 **الرجاء إرسال اسم الاشتراك الخاص بك:**\n(أرسل الاسم كما استلمته من المبيعات بالضبط)", parse_mode="Markdown")
+        bot.register_next_step_handler(msg, process_add_sub, bot)
+
+    @bot.callback_query_handler(func=lambda call: call.data.startswith("view_sub_"))
+    def view_sub_callback(call):
+        email = call.data.split("view_sub_")[1]
+        show_sub_details(bot, call.message.chat.id, email, call.message.message_id)
+
+    @bot.callback_query_handler(func=lambda call: call.data == "user_main_menu")
+    def back_to_main(call):
+        show_user_main_menu(bot, call.message.chat.id, call.message.message_id)
+
+def process_add_sub(message, bot):
+    email = message.text.strip()
+    chat_id = message.chat.id
+    success = db.link_user_subscription(chat_id, email)
+    
+    if success:
+        bot.send_message(chat_id, f"✅ **تم إضافة الحساب بنجاح!**\nتم ربط الاشتراك `{email}` بحسابك.", parse_mode="Markdown")
+    else:
+        bot.send_message(chat_id, "❌ **عذراً!** إما أن الاسم غير صحيح، أو أنه مربوط بحساب آخر مسبقاً.", parse_mode="Markdown")
+    
+    show_user_main_menu(bot, chat_id)
+
+def show_user_main_menu(bot, chat_id, message_id=None):
+    subs = db.get_user_subscriptions(chat_id)
+    markup = InlineKeyboardMarkup(row_width=1)
+    
+    markup.add(InlineKeyboardButton("➕ إضافة حساب اشتراك", callback_data="add_user_sub"))
+    
+    # إضافة أزرار للاشتراكات المربوطة
+    for sub in subs:
+        markup.add(InlineKeyboardButton(f"👤 {sub}", callback_data=f"view_sub_{sub}"))
+        
+    text = "👋 **مرحباً بك في بوابة المشتركين!**\n\nمن خلال هذا البوت يمكنك:\n🔹 متابعة استهلاكك للبيانات\n🔹 معرفة متى ينتهي اشتراكك\n🔹 استلام تنبيهات قبل انتهاء الاشتراك\n\n👇 اضغط على **إضافة حساب اشتراك** وأرسل اسمك لربط حسابك."
+    
+    if message_id:
+        try: bot.edit_message_text(text, chat_id, message_id, reply_markup=markup, parse_mode="Markdown")
+        except: bot.send_message(chat_id, text, reply_markup=markup, parse_mode="Markdown")
+    else:
+        bot.send_message(chat_id, text, reply_markup=markup, parse_mode="Markdown")
+
+def show_sub_details(bot, chat_id, email, message_id):
+    details = db.get_subscription_details(email)
+    if not details:
+        bot.send_message(chat_id, "❌ حدث خطأ في جلب بيانات الاشتراك.")
+        return
+    
+    expiry_date, quota_bytes, status, last_seen, total_sec = details
+    
+    # حساب الوقت المتبقي
+    now = time.time()
+    expiry_time = float(expiry_date)
+    time_left = expiry_time - now
+    
+    if time_left <= 0:
+        time_str = "منتهي ❌"
+        status_icon = "🔴 غير نشط"
+    else:
+        days = int(time_left // 86400)
+        hours = int((time_left % 86400) // 3600)
+        time_str = f"{days} يوم و {hours} ساعة"
+        status_icon = "🟢 نشط" if status == 'active' else "🔴 متوقف"
+
+    # حساب الاستهلاك
+    usage_data = db.get_usage_stats(email, 0) # نجلب الاستهلاك
+    quota_str = "بلا حدود ♾️" if quota_bytes == 0 else f"{quota_bytes / (1024**3):.2f} GB"
+    
+    # فورمات الوقت الكلي
+    total_hours = int(total_sec // 3600)
+    total_mins = int((total_sec % 3600) // 60)
+    
+    last_seen_str = last_seen if last_seen else "لم يتصل بعد"
+
+    text = f"📊 **تفاصيل الاشتراك:** `{email}`\n"
+    text += f"━━━━━━━━━━━━━━━━━━\n"
+    text += f"🚦 **الحالة:** {status_icon}\n"
+    text += f"⏳ **الوقت المتبقي:** {time_str}\n"
+    text += f"📅 **موعد الانتهاء:** {datetime.datetime.fromtimestamp(expiry_time).strftime('%Y-%m-%d %H:%M')}\n"
+    text += f"━━━━━━━━━━━━━━━━━━\n"
+    text += f"💾 **السعة الإجمالية:** {quota_str}\n"
+    text += f"━━━━━━━━━━━━━━━━━━\n"
+    text += f"📡 **آخر ظهور:** {last_seen_str}\n"
+    text += f"⏱️ **إجمالي وقت التشغيل:** {total_hours} ساعة و {total_mins} دقيقة\n"
+    
+    markup = InlineKeyboardMarkup()
+    markup.add(InlineKeyboardButton("🛒 تجديد الاشتراك", url="https://t.me/l_t22"))
+    markup.add(InlineKeyboardButton("📢 قناة التحديثات", url="https://t.me/r338888"))
+    markup.add(InlineKeyboardButton("🔙 رجوع", callback_data="user_main_menu"))
+    
+    bot.edit_message_text(text, chat_id, message_id, reply_markup=markup, parse_mode="Markdown")
