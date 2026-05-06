@@ -10,6 +10,7 @@ from xray_core.panel_api import PanelAPI
 # استدعاء المعالجات
 from handlers import admin_start, create_flow, manage_flow, speed_test, radar_flow
 from handlers import user_handlers # ملف واجهة المشتركين
+from handlers import servers_flow # 🔥 إضافة ملف إدارة السيرفرات الجديد 🔥
 
 # استدعاء المراقبين
 from quota_monitor import start_quota_monitor 
@@ -90,7 +91,8 @@ create_flow.register_create_handlers(bot)
 manage_flow.register_manage_handlers(bot)
 speed_test.register_speed_handlers(bot)
 radar_flow.register_radar_handlers(bot)
-user_handlers.register_user_handlers(bot) # تسجيل أزرار واجهة العميل
+user_handlers.register_user_handlers(bot) 
+servers_flow.register_servers_handlers(bot) # 🔥 تفعيل أزرار شبكة السيرفرات الجديدة 🔥
 
 # 🔥 فتح أمر البداية للكل مع صائد الأخطاء ومطابقة الـ ID 🔥
 @bot.message_handler(commands=['start'])
