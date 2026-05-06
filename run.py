@@ -9,13 +9,13 @@ from xray_core.panel_api import PanelAPI
 
 # استدعاء المعالجات
 from handlers import admin_start, create_flow, manage_flow, speed_test, radar_flow
-from handlers import user_handlers # 👈 ملف واجهة المشتركين الجديد
+from handlers import user_handlers # ملف واجهة المشتركين
 
-# استدعاء المراقبين (نظام الطرد، الرادار، ونظام التنبيهات الذكي)
+# استدعاء المراقبين
 from quota_monitor import start_quota_monitor 
 from radar_monitor import start_radar_monitor 
 try:
-    from user_notifier import start_notifier # 👈 ملف تنبيهات المشتركين الجديد
+    from user_notifier import start_notifier # نظام التنبيهات
 except ImportError:
     def start_notifier(bot): pass
 
@@ -23,7 +23,7 @@ except ImportError:
 bot = telebot.TeleBot(config.BOT_TOKEN)
 api = PanelAPI()
 
-# 2. إضافة فلتر الحماية (نستخدمه فقط للأزرار الخاصة بالإدارة)
+# 2. إضافة فلتر الحماية (للأدمن فقط)
 class IsAdmin(telebot.custom_filters.SimpleCustomFilter):
     key = 'is_admin'
     def check(self, message):
@@ -86,21 +86,22 @@ create_flow.register_create_handlers(bot)
 manage_flow.register_manage_handlers(bot)
 speed_test.register_speed_handlers(bot)
 radar_flow.register_radar_handlers(bot)
-user_handlers.register_user_handlers(bot) # 👈 تسجيل أزرار واجهة العميل
+user_handlers.register_user_handlers(bot) # تسجيل أزرار واجهة العميل
 
-# 🔥 التحديث الجذري: فتح أمر البداية للكل وتوجيه كل شخص للوحته الخاصة 🔥
-# لاحظ: مسحنا is_admin=True من هنا حتى الكل يكدر يضغط start
+# 🔥 التحديث الجذري: فتح أمر البداية للكل مع صائد الأخطاء ومطابقة الـ ID 🔥
 @bot.message_handler(commands=['start'])
 def start_command(message):
     chat_id = message.chat.id
-    
-    # 1. إذا كان الشخص هو الأدمن ⬅️ تطلعله لوحة الإدارة
-    if str(chat_id) == str(config.ADMIN_ID):
-        admin_start.show_main_menu(bot, chat_id)
-        
-    # 2. إذا كان شخص عادي ⬅️ تطلعله لوحة خدمة العملاء
-    else:
-        user_handlers.show_user_main_menu(bot, chat_id)
+    try:
+        # مقارنة دقيقة للتأكد من التعرف على الأدمن
+        if str(chat_id) == str(config.ADMIN_ID):
+            admin_start.show_main_menu(bot, chat_id)
+        else:
+            # توجيه المستخدم العادي
+            user_handlers.show_user_main_menu(bot, chat_id)
+    except Exception as e:
+        # إذا صار خطأ بملفات المستخدم، البوت ما راح يسكت، راح يدزلك الخطأ
+        bot.send_message(chat_id, f"⚠️ عذراً، حدث خطأ داخلي في البوت:\n`{e}`", parse_mode="Markdown")
 
 @bot.callback_query_handler(func=lambda call: call.data == "server_status", is_admin=True)
 def send_server_status(call):
@@ -159,13 +160,13 @@ if __name__ == "__main__":
     threading.Thread(target=start_quota_monitor, daemon=True).start()
     threading.Thread(target=start_radar_monitor, daemon=True).start()
     
-    # 👈 تشغيل مراقب الإشعارات التلقائية للعملاء بالخلفية
+    # تشغيل مراقب الإشعارات التلقائية للعملاء بالخلفية
     threading.Thread(target=start_notifier, args=(bot,), daemon=True).start()
     
     print("📡 نظام الرادار ومراقبة الوقت يعملان الآن بالخلفية...")
     
     try:
-        # إضافة timeout حتى ما يفصل البوت بالشبكات الضعيفة
+        # إضافة timeout لتجنب توقف البوت فجأة
         bot.infinity_polling(timeout=60, long_polling_timeout=60)
     except Exception as e:
         print(f"❌ حدث خطأ في البوت: {e}")
