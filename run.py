@@ -6,11 +6,15 @@ import time
 import config
 import os
 from xray_core.panel_api import PanelAPI
+
 # استدعاء المعالجات
 from handlers import admin_start, create_flow, manage_flow, speed_test, radar_flow
-# استدعاء المراقبين (نظام الطرد ونظام الرادار الجديد)
+from handlers import user_handlers # 👈 ملف واجهة المشتركين الجديد
+
+# استدعاء المراقبين (نظام الطرد، الرادار، ونظام التنبيهات الذكي)
 from quota_monitor import start_quota_monitor 
-from radar_monitor import start_radar_monitor # 👈 الرادار الجديد
+from radar_monitor import start_radar_monitor 
+from user_notifier import start_notifier # 👈 ملف تنبيهات المشتركين الجديد
 
 # 1. تهيئة البوت والـ API
 bot = telebot.TeleBot(config.BOT_TOKEN)
@@ -78,20 +82,25 @@ def get_status_keyboard(is_live=False):
 create_flow.register_create_handlers(bot)
 manage_flow.register_manage_handlers(bot)
 speed_test.register_speed_handlers(bot)
-radar_flow.register_radar_handlers(bot) # 👈 تسجيل معالج الرادار الجديد
+radar_flow.register_radar_handlers(bot)
+user_handlers.register_user_handlers(bot) # 👈 تسجيل أزرار واجهة العميل
 
-@bot.message_handler(commands=['start'], is_admin=True)
+# 👈 فصل ذكي بين الأدمن والعميل
+@bot.message_handler(commands=['start'])
 def start(message):
-    admin_start.show_main_menu(bot, message.chat.id)
+    if message.chat.id == config.ADMIN_ID:
+        admin_start.show_main_menu(bot, message.chat.id)
+    else:
+        user_handlers.show_user_main_menu(bot, message.chat.id)
 
-@bot.callback_query_handler(func=lambda call: call.data == "server_status")
+@bot.callback_query_handler(func=lambda call: call.data == "server_status", is_admin=True)
 def send_server_status(call):
     text = get_server_status_text()
     markup = get_status_keyboard()
     bot.send_message(call.message.chat.id, text, reply_markup=markup, parse_mode="Markdown")
     bot.answer_callback_query(call.id)
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith("status_"))
+@bot.callback_query_handler(func=lambda call: call.data.startswith("status_"), is_admin=True)
 def handle_status_callbacks(call):
     chat_id = call.message.chat.id
     msg_id = call.message.message_id
@@ -138,11 +147,11 @@ def handle_status_callbacks(call):
 if __name__ == "__main__":
     print(f"🚀 البوت يعمل الآن للأدمن ID: {config.ADMIN_ID}")
     
-    # ✅ 1. تشغيل مراقب الحصص (الطرد التلقائي)
     threading.Thread(target=start_quota_monitor, daemon=True).start()
-    
-    # ✅ 2. تشغيل مراقب السجلات (الرادار 24 ساعة)
     threading.Thread(target=start_radar_monitor, daemon=True).start()
+    
+    # 👈 تشغيل مراقب الإشعارات التلقائية للعملاء بالخلفية
+    threading.Thread(target=start_notifier, args=(bot,), daemon=True).start()
     
     print("📡 نظام الرادار ومراقبة الوقت يعملان الآن بالخلفية...")
     
