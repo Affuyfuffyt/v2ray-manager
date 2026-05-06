@@ -18,6 +18,12 @@ from db import (
     get_all_pending_rewards, remove_pending_reward, get_user_connection_seconds
 )
 
+# 👇 استدعاء نظام الإشعارات لإبلاغ العميل
+try:
+    from user_notifier import notify_extension
+except ImportError:
+    def notify_extension(bot, email, seconds_added): pass
+
 creation_data = {}
 watchdog_started = False
 
@@ -212,9 +218,12 @@ def database_expiry_watchdog(bot):
                     # حذف المكافأة لأنها اتنفذت
                     remove_pending_reward(inv_email)
                     
-                    # إرسال تأكيد وريستارت
+                    # إرسال تأكيد للأدمن وريستارت للسيرفر
                     bot.send_message(c_id, f"🎉 **تم تفعيل المكافأة المعلقة!**\n\nقام المشترك الجديد `{inv_email}` باستخدام الكود لمدة دقيقة.\nتم الآن تمديد وإعادة تشغيل كود الداعي `{ref_email}` بنجاح! 🚀", parse_mode="Markdown")
                     restart_alwaysdata()
+
+                    # 🔥 إرسال إشعار للمشترك الداعي بالتمديد (إذا كان رابط حسابه بالبوت) 🔥
+                    notify_extension(bot, ref_email, reward_sec)
 
         except Exception as e:
             pass
@@ -284,7 +293,6 @@ def register_create_handlers(bot):
             days = int(choice)
             apply_reward(chat_id, bot, days * 86400)
 
-    # 🔥 تحديث إدخال المدة اليدوية (إضافة الدقائق m والأشهر mo) 🔥
     def manual_reward_input(message, bot):
         chat_id = message.chat.id
         text = message.text.lower().strip()
