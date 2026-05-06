@@ -10,14 +10,10 @@ import threading
 import os
 import urllib.parse
 
-# 👇 استدعاء دوال الحفظ + الدالة السحرية لتمديد اللوحة (JSON)
 from database import save_user, extend_json_expiry
 from db import add_user, get_active_users, set_user_expired, get_user_by_ref_code, extend_user_expiry, assign_ref_code
 
-# قاموس لحفظ بيانات الإنشاء المؤقتة
 creation_data = {}
-
-# متغير لمنع تشغيل المراقب أكثر من مرة
 watchdog_started = False
 
 # ==========================================
@@ -35,7 +31,6 @@ def add_client_to_config(user_name, uuid_val, protocol):
             if "inbounds" in config_data:
                 for inbound in config_data["inbounds"]:
                     
-                    # 1. تنظيف أخطاء التورجان القديمة
                     if inbound.get("protocol") == "trojan" and "settings" in inbound:
                         clients = inbound["settings"].setdefault("clients", [])
                         for c in clients:
@@ -43,7 +38,6 @@ def add_client_to_config(user_name, uuid_val, protocol):
                                 c["password"] = c.pop("id")
                                 modified = True
 
-                    # 2. زراعة المشترك الجديد في التاك المناسب
                     if inbound.get("tag") == protocol and "settings" in inbound:
                         clients = inbound["settings"].setdefault("clients", [])
                         exists = any(c.get("id") == uuid_val or c.get("password") == uuid_val for c in clients)
@@ -261,24 +255,47 @@ def register_create_handlers(bot):
             return
         apply_reward(chat_id, bot, sec)
 
-    # 🔥 التحديث الجذري: تمديد للداعي + ريستارت مباشر لتفعيل كوده 🔥
+    # 🔥 التحديث الجذري: تمديد + إعادة زراعة الكود بالسيرفر + ريستارت 🔥
     def apply_reward(chat_id, bot, seconds):
         referrer_email = creation_data[chat_id].get('referrer')
         if referrer_email:
-            # 1. تحديث وقت المشترك في الرادار (SQLite)
+            # 1. تحديث وقت المشترك
             extend_user_expiry(referrer_email, seconds)
-            
-            # 2. تحديث وقت المشترك في اللوحة (JSON)
             try:
                 extend_json_expiry(referrer_email, seconds)
-            except Exception as e:
-                print(f"JSON Reward Error: {e}")
+            except:
+                pass
 
-            bot.send_message(chat_id, f"🎉 **تمت المكافأة!**\nتم تمديد صلاحية المشترك الداعي `{referrer_email}` بنجاح.\n🔄 جاري عمل ريستارت للسيرفر لتفعيل كود الداعي...", parse_mode="Markdown")
+            # 2. البحث عن الـ UUID مال الداعي حتى نرجعه لملف السيرفر
+            ref_uuid = None
+            try:
+                home_dir = os.path.expanduser("~")
+                for json_name in ["users_db.json", "database.json", "data.json"]:
+                    db_path = os.path.join(home_dir, "v2ray_manager", json_name)
+                    if os.path.exists(db_path):
+                        with open(db_path, 'r', encoding='utf-8') as f:
+                            db_data = json.load(f)
+                            if referrer_email in db_data:
+                                ref_uuid = db_data[referrer_email].get('uuid')
+                                break
+            except:
+                pass
+
+            # 3. زراعة الداعي من جديد
+            if ref_uuid:
+                try:
+                    from xray_core.panel_api import PanelAPI
+                    local_api = PanelAPI()
+                    local_api.create_client(referrer_email, ref_uuid, "vless")
+                except:
+                    pass
+                add_client_to_config(referrer_email, ref_uuid, "vless") # افتراضي vless
+
+            bot.send_message(chat_id, f"🎉 **تمت المكافأة!**\nتم تمديد صلاحية المشترك الداعي `{referrer_email}` بنجاح.\n🔄 جاري تفعيل كود الداعي بالسيرفر...", parse_mode="Markdown")
             
-            # 3. عمل ريستارت فوري للسيرفر حتى يشتغل كود الداعي مباشرة
+            # 4. ريستارت فوري حتى يشتغل الكود
             time.sleep(1)
-            restart_alwaysdata(bot, chat_id, "✅ **تم الريستارت! كود الداعي شغال الآن 100%.** 🚀", "⚠️ التمديد نجح، بس فشل الريستارت التلقائي.")
+            restart_alwaysdata(bot, chat_id, "✅ **تم التفعيل! كود الداعي شغال الآن 100%.** 🚀", "⚠️ التمديد نجح، بس فشل الريستارت التلقائي.")
 
         ask_protocol(chat_id, bot)
 
