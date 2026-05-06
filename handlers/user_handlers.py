@@ -146,16 +146,37 @@ def show_sub_details(bot, chat_id, email, message_id):
         expiry_time = float(expiry_date)
         time_left = expiry_time - now
         
+        # 3. 🔥 النظام الذكي لمعرفة حالة الاتصال الحقيقية (متصل / غير متصل) 🔥
+        is_online = False
+        if last_seen:
+            try:
+                # تحويل وقت آخر ظهور إلى ثواني للمقارنة
+                last_seen_dt = datetime.datetime.strptime(last_seen, "%Y-%m-%d %H:%M:%S")
+                last_seen_ts = last_seen_dt.timestamp()
+                # إذا كان آخر ظهور خلال آخر 3 دقائق (180 ثانية)، نعتبره متصل
+                if now - last_seen_ts <= 180:
+                    is_online = True
+            except:
+                pass
+
         if time_left <= 0:
             time_str = "منتهي ❌"
-            status_icon = "🔴 غير نشط"
+            status_icon = "⚫ منتهي الصلاحية"
         else:
             days = int(time_left // 86400)
             hours = int((time_left % 86400) // 3600)
             time_str = f"{days} يوم و {hours} ساعة"
-            status_icon = "🟢 نشط" if status == 'active' else "🔴 متوقف"
+            
+            # تحديد الأيقونة والنص بناءً على حالة الرادار
+            if status == 'active':
+                if is_online:
+                    status_icon = "🟢 متصل الآن"
+                else:
+                    status_icon = "🔴 غير متصل"
+            else:
+                status_icon = "🔴 متوقف من الإدارة"
         
-        # 3. فورمات الوقت الكلي (مع الحماية من القيم الفارغة)
+        # 4. فورمات الوقت الكلي (مع الحماية من القيم الفارغة)
         total_sec = total_sec or 0
         total_hours = int(total_sec // 3600)
         total_mins = int((total_sec % 3600) // 60)
