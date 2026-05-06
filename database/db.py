@@ -10,40 +10,85 @@ def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     
-    # 1. جدول المشتركين (مع الحفاظ على القديم)
+    # 1. جدول المشتركين
     c.execute('''CREATE TABLE IF NOT EXISTS users
                  (email TEXT PRIMARY KEY, uuid TEXT, port INTEGER, quota_bytes REAL, expiry_date TEXT, status TEXT)''')
                  
-    # 2. جدول الاستهلاك اليومي للبيانات
+    # 2. جدول الاستهلاك اليومي
     c.execute('''CREATE TABLE IF NOT EXISTS daily_usage
                  (email TEXT, date TEXT, total_used REAL)''')
                  
-    # 🔥 التحديثات الجديدة للرادار (آخر ظهور + الوقت) 🔥
-    try:
-        c.execute("ALTER TABLE users ADD COLUMN last_seen TEXT")
-    except:
-        pass 
-    try:
-        c.execute("ALTER TABLE users ADD COLUMN total_connection_seconds REAL DEFAULT 0")
-    except:
-        pass 
+    # 🔥 تحديثات الرادار 
+    try: c.execute("ALTER TABLE users ADD COLUMN last_seen TEXT")
+    except: pass 
+    try: c.execute("ALTER TABLE users ADD COLUMN total_connection_seconds REAL DEFAULT 0")
+    except: pass 
 
-    # 🔥 إضافة حقل كود الدعوة للمشتركين 🔥
-    try:
-        c.execute("ALTER TABLE users ADD COLUMN ref_code TEXT")
-    except:
-        pass
+    # 🔥 تحديث نظام الدعوات
+    try: c.execute("ALTER TABLE users ADD COLUMN ref_code TEXT")
+    except: pass
 
-    # 3. جدول أرشيف وقت الاتصال اليومي (للوحة الشاملة)
+    # 3. جدول أرشيف وقت الاتصال
     c.execute('''CREATE TABLE IF NOT EXISTS daily_connection
                  (email TEXT, date TEXT, connection_seconds REAL, PRIMARY KEY (email, date))''')
 
-    # 🔥 4. الجدول الجديد للمكافآت المعلقة (الذكية) 🔥
+    # 4. جدول المكافآت المعلقة
     c.execute('''CREATE TABLE IF NOT EXISTS pending_rewards
                  (referrer_email TEXT, invited_email TEXT, reward_seconds REAL, chat_id TEXT)''')
 
+    # 🔥 5. الجدول الجديد لربط العملاء بالبوت (تطبيق خدمة العملاء) 🔥
+    c.execute('''CREATE TABLE IF NOT EXISTS user_subscriptions
+                 (chat_id TEXT, email TEXT, PRIMARY KEY (chat_id, email))''')
+
     conn.commit()
     conn.close()
+
+# ==========================================
+# 👥 دوال تطبيق خدمة العملاء (ربط الحسابات) 👥
+# ==========================================
+
+def link_user_subscription(chat_id, email):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    # نتحقق أولاً هل الاسم موجود فعلاً بقاعدة بيانات السيرفر
+    c.execute("SELECT email FROM users WHERE email=?", (email,))
+    if c.fetchone():
+        try:
+            c.execute("INSERT INTO user_subscriptions (chat_id, email) VALUES (?, ?)", (str(chat_id), email))
+            conn.commit()
+            success = True
+        except sqlite3.IntegrityError:
+            success = False # الحساب مربوط مسبقاً بهذا الشخص
+    else:
+        success = False # الاسم مو موجود بالسيرفر
+    conn.close()
+    return success
+
+def get_user_subscriptions(chat_id):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT email FROM user_subscriptions WHERE chat_id=?", (str(chat_id),))
+    rows = c.fetchall()
+    conn.close()
+    return [row[0] for row in rows]
+
+def get_chat_id_by_email(email):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT chat_id FROM user_subscriptions WHERE email=?", (email,))
+    rows = c.fetchall()
+    conn.close()
+    return [row[0] for row in rows] # قد يكون الحساب مربوط بأكثر من تليجرام (مثلاً أصدقاء)
+
+def get_subscription_details(email):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT expiry_date, quota_bytes, status, last_seen, total_connection_seconds FROM users WHERE email=?", (email,))
+    data = c.fetchone()
+    conn.close()
+    return data
+
+# ==========================================
 
 def add_user(email, uuid, port, quota_bytes, expiry_date):
     conn = sqlite3.connect(DB_PATH)
