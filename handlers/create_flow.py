@@ -10,7 +10,7 @@ import threading
 import os
 import urllib.parse
 
-# 👇 التصحيح الجذري هنا: فصلنا استدعاء قواعد البيانات حتى الرادار يقرأ المشترك الجديد فوراً
+# 👇 فصلنا استدعاء قواعد البيانات حتى الرادار يقرأ المشترك الجديد فوراً
 from database import save_user
 from db import add_user, get_active_users, set_user_expired
 
@@ -21,7 +21,7 @@ creation_data = {}
 watchdog_started = False
 
 # ==========================================
-# 🛠️ دالة الإضافة الذكية (المنقذ الحقيقي لبروتوكول التورجان)
+# 🛠️ دالة الإضافة الذكية
 # ==========================================
 def add_client_to_config(user_name, uuid_val, protocol):
     try:
@@ -35,7 +35,7 @@ def add_client_to_config(user_name, uuid_val, protocol):
             if "inbounds" in config_data:
                 for inbound in config_data["inbounds"]:
                     
-                    # 🔥 1. تنظيف أي أخطاء قديمة سواها الـ API بالتورجان 🔥
+                    # 1. تنظيف أخطاء التورجان القديمة
                     if inbound.get("protocol") == "trojan" and "settings" in inbound:
                         clients = inbound["settings"].setdefault("clients", [])
                         for c in clients:
@@ -43,7 +43,7 @@ def add_client_to_config(user_name, uuid_val, protocol):
                                 c["password"] = c.pop("id")
                                 modified = True
 
-                    # 🔥 2. زراعة المشترك الجديد في التاك (Tag) الخاص به فقط 🔥
+                    # 2. زراعة المشترك الجديد في التاك المناسب
                     if inbound.get("tag") == protocol and "settings" in inbound:
                         clients = inbound["settings"].setdefault("clients", [])
                         exists = any(c.get("id") == uuid_val or c.get("password") == uuid_val for c in clients)
@@ -53,7 +53,7 @@ def add_client_to_config(user_name, uuid_val, protocol):
                             elif protocol == "vmess":
                                 clients.append({"id": uuid_val, "email": user_name, "alterId": 0})
                             elif protocol == "trojan":
-                                clients.append({"password": uuid_val, "email": user_name}) # التورجان حصراً يأخذ password
+                                clients.append({"password": uuid_val, "email": user_name})
                             modified = True
                         break 
                         
@@ -125,7 +125,6 @@ def auto_restart_on_expiry(bot, chat_id, expiry_time, user_name, uuid_val, proto
     if wait_seconds > 0:
         time.sleep(wait_seconds) 
         
-    # 🚨 انتهى الوقت!
     if protocol != "trojan":
         try:
             from xray_core.panel_api import PanelAPI
@@ -159,7 +158,7 @@ def database_expiry_watchdog(bot):
 
     while True:
         try:
-            active_users = get_active_users() # يقرأ من الداتا بيس
+            active_users = get_active_users() 
             current_time = time.time()
             expired_names = []
             
@@ -417,13 +416,18 @@ def register_create_handlers(bot):
 
         add_client_to_config(data['name'], data['uuid'], protocol)
 
-        # 🚀 الحفظ المزدوج المطور: الآن يحفظ بالـ JSON وبنفس الوقت يبلغ الرادار 🚀
+        # 🔥 1. الحفظ بقاعدة البيانات القديمة (JSON) 🔥
         try:
             save_user(data['name'], data['uuid'], data['quota_bytes'], expiry_time)
+        except Exception as e:
+            print(f"Error saving to old DB: {e}")
+
+        # 🔥 2. الحفظ بقاعدة بيانات الرادار (SQLite) حتى يظهر بالرادار كـ خامل 🔥
+        try:
             selected_port = data.get('port', 443)
             add_user(data['name'], data['uuid'], selected_port, data['quota_bytes'], expiry_time)
         except Exception as e:
-            print(f"Error saving to DB: {e}")
+            print(f"Error saving to Radar DB: {e}")
 
         threading.Thread(
             target=auto_restart_on_expiry, 
