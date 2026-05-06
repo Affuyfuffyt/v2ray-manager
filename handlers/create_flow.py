@@ -10,19 +10,12 @@ import threading
 import os
 import urllib.parse
 
-# 👇 فصلنا استدعاء قواعد البيانات حتى الرادار يقرأ المشترك الجديد فوراً
-from database import save_user
+from database import save_user, extend_json_expiry
 from db import add_user, get_active_users, set_user_expired, get_user_by_ref_code, extend_user_expiry, assign_ref_code
 
-# قاموس لحفظ بيانات الإنشاء المؤقتة
 creation_data = {}
-
-# متغير لمنع تشغيل المراقب أكثر من مرة
 watchdog_started = False
 
-# ==========================================
-# 🛠️ دالة الإضافة الذكية
-# ==========================================
 def add_client_to_config(user_name, uuid_val, protocol):
     try:
         home_dir = os.path.expanduser("~")
@@ -34,8 +27,6 @@ def add_client_to_config(user_name, uuid_val, protocol):
             modified = False
             if "inbounds" in config_data:
                 for inbound in config_data["inbounds"]:
-                    
-                    # 1. تنظيف أخطاء التورجان القديمة
                     if inbound.get("protocol") == "trojan" and "settings" in inbound:
                         clients = inbound["settings"].setdefault("clients", [])
                         for c in clients:
@@ -43,7 +34,6 @@ def add_client_to_config(user_name, uuid_val, protocol):
                                 c["password"] = c.pop("id")
                                 modified = True
 
-                    # 2. زراعة المشترك الجديد في التاك المناسب
                     if inbound.get("tag") == protocol and "settings" in inbound:
                         clients = inbound["settings"].setdefault("clients", [])
                         exists = any(c.get("id") == uuid_val or c.get("password") == uuid_val for c in clients)
@@ -63,9 +53,6 @@ def add_client_to_config(user_name, uuid_val, protocol):
     except Exception as e:
         print(f"Error adding to config: {e}")
 
-# ==========================================
-# 🗑️ دالة حذف المشترك المنتهي
-# ==========================================
 def remove_client_from_config(uuid_val):
     try:
         home_dir = os.path.expanduser("~")
@@ -90,9 +77,6 @@ def remove_client_from_config(uuid_val):
     except Exception as e:
         print(f"Error removing from config: {e}")
 
-# ==========================================
-# 🔄 دالة عمل ريستارت للسيرفر
-# ==========================================
 def restart_alwaysdata(bot=None, chat_id=None, success_msg=None, fail_msg=None):
     try:
         home_dir = os.path.expanduser("~")
@@ -117,9 +101,6 @@ def restart_alwaysdata(bot=None, chat_id=None, success_msg=None, fail_msg=None):
         print(f"Restart Error: {e}")
     return False
 
-# ==========================================
-# ⏱️ العداد التنازلي لطرد المشترك
-# ==========================================
 def auto_restart_on_expiry(bot, chat_id, expiry_time, user_name, uuid_val, protocol):
     wait_seconds = expiry_time - time.time()
     if wait_seconds > 0:
@@ -140,10 +121,6 @@ def auto_restart_on_expiry(bot, chat_id, expiry_time, user_name, uuid_val, proto
     fail_msg = f"⚠️ انتهى وقت `{user_name}` ولكن فشل الريستارت التلقائي!"
     restart_alwaysdata(bot, chat_id, success_msg, fail_msg)
 
-
-# ==========================================
-# 👁️ مراقب قاعدة البيانات الدائم
-# ==========================================
 def database_expiry_watchdog(bot):
     admin_id = None
     home_dir = os.path.expanduser("~")
@@ -181,7 +158,6 @@ def database_expiry_watchdog(bot):
             pass
         time.sleep(60)
 
-
 def register_create_handlers(bot):
     global watchdog_started
     if not watchdog_started:
@@ -194,9 +170,6 @@ def register_create_handlers(bot):
         msg = bot.send_message(chat_id, "📝 أرسل اسم المشترك (باللغة الإنجليزية وبدون مسافات):")
         bot.register_next_step_handler(msg, process_name, bot)
 
-    # ==========================================
-    # 🎁 نظام دعوات المشتركين والمكافآت 🎁
-    # ==========================================
     def process_name(message, bot):
         chat_id = message.chat.id
         creation_data[chat_id] = {'name': message.text.strip()}
@@ -261,47 +234,14 @@ def register_create_handlers(bot):
             return
         apply_reward(chat_id, bot, sec)
 
-    # 🔥 التحديث الجذري: هاي الدالة هسه تحدث الرادار (SQLite) واللوحة (JSON) سويه 🔥
     def apply_reward(chat_id, bot, seconds):
         referrer_email = creation_data[chat_id].get('referrer')
         if referrer_email:
-            # 1. تحديث وقت المشترك في الرادار
             extend_user_expiry(referrer_email, seconds)
-            
-            # 2. تحديث وقت المشترك في ملف JSON حتى يظهر بلوحة "تفاصيل المشترك"
-            try:
-                home_dir = os.path.expanduser("~")
-                # البحث عن اسم ملف البيانات القديم
-                for json_name in ["database.json", "data.json", "users.json"]:
-                    json_path = os.path.join(home_dir, "v2ray_manager", json_name)
-                    if not os.path.exists(json_path):
-                        json_path = json_name
-                        
-                    if os.path.exists(json_path):
-                        with open(json_path, 'r', encoding='utf-8') as f:
-                            db_data = json.load(f)
-                            
-                        if referrer_email in db_data:
-                            # تحديث وقت الانتهاء
-                            for key in ['expiry_time', 'expiry_date', 'expiry']:
-                                if key in db_data[referrer_email]:
-                                    current_val = float(db_data[referrer_email][key])
-                                    db_data[referrer_email][key] = current_val + seconds
-                                    break
-                            
-                            # حفظ التحديث
-                            with open(json_path, 'w', encoding='utf-8') as f:
-                                json.dump(db_data, f, indent=4)
-                            break
-            except Exception as e:
-                print(f"Error updating JSON for reward: {e}")
-
+            extend_json_expiry(referrer_email, seconds)
             bot.send_message(chat_id, f"🎉 **تمت المكافأة!**\nتم تمديد صلاحية المشترك الداعي `{referrer_email}` بنجاح.", parse_mode="Markdown")
         ask_protocol(chat_id, bot)
 
-    # ==========================================
-    # إكمال عملية الإنشاء الطبيعية
-    # ==========================================
     def ask_protocol(chat_id, bot, message_id=None):
         markup = InlineKeyboardMarkup(row_width=3)
         markup.add(
@@ -529,20 +469,17 @@ def register_create_handlers(bot):
 
         add_client_to_config(data['name'], data['uuid'], protocol)
 
-        # 1. الحفظ بقاعدة البيانات القديمة (JSON)
         try:
             save_user(data['name'], data['uuid'], data['quota_bytes'], expiry_time)
         except Exception as e:
             print(f"Error saving to old DB: {e}")
 
-        # 2. الحفظ بقاعدة بيانات الرادار (SQLite)
         try:
             selected_port = data.get('port', 443)
             add_user(data['name'], data['uuid'], selected_port, data['quota_bytes'], expiry_time)
         except Exception as e:
             print(f"Error saving to Radar DB: {e}")
 
-        # 🔥 توليد وحفظ كود دعوة خاص للمشترك الجديد 🔥
         new_ref_code = "REF-" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=5))
         try:
             assign_ref_code(data['name'], new_ref_code)
@@ -602,9 +539,6 @@ def register_create_handlers(bot):
 👤 **الاسم:** `{data['name']}`
 🌐 **البروتوكول:** `{protocol.upper()}`
 🚪 **البورت:** `{selected_port}`
-🛤️ **المسار:** `{fixed_path}`
-🔑 **المعرف:** `{data['uuid']}`
-👥 **الأجهزة المتصلة:** `{data['ips']}`
 ⏳ **المدة:** `{data['duration_str']}`
 📊 **السعة:** `{quota_display}`
 🎁 **كود الدعوة الخاص به:** `{new_ref_code}` (يستخدمه لدعوة أصدقائه)
