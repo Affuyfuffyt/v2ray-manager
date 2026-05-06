@@ -38,6 +38,10 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS daily_connection
                  (email TEXT, date TEXT, connection_seconds REAL, PRIMARY KEY (email, date))''')
 
+    # 🔥 4. الجدول الجديد للمكافآت المعلقة (الذكية) 🔥
+    c.execute('''CREATE TABLE IF NOT EXISTS pending_rewards
+                 (referrer_email TEXT, invited_email TEXT, reward_seconds REAL, chat_id TEXT)''')
+
     conn.commit()
     conn.close()
 
@@ -112,6 +116,39 @@ def extend_user_expiry(email, extra_seconds):
         conn.close()
         return new_expiry
     return None
+
+# ==========================================
+# ⏳ دوال المكافآت المعلقة (النظام الذكي) ⏳
+# ==========================================
+def add_pending_reward(referrer, invited, seconds, chat_id):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("INSERT INTO pending_rewards VALUES (?, ?, ?, ?)", (referrer, invited, seconds, str(chat_id)))
+    conn.commit()
+    conn.close()
+
+def get_all_pending_rewards():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT referrer_email, invited_email, reward_seconds, chat_id FROM pending_rewards")
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+def remove_pending_reward(invited_email):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("DELETE FROM pending_rewards WHERE invited_email=?", (invited_email,))
+    conn.commit()
+    conn.close()
+
+def get_user_connection_seconds(email):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT total_connection_seconds FROM users WHERE email=?", (email,))
+    row = c.fetchone()
+    conn.close()
+    return row[0] if row else 0
 
 # ==========================================
 # 📡 دوال الرادار الجديدة (اللوحة الشاملة) 📡
