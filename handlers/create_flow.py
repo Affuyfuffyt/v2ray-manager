@@ -10,7 +10,7 @@ import threading
 import os
 import urllib.parse
 
-# 👇 استدعاء جميع الدوال بما فيها دوال نظام الدعوات
+# 👇 فصلنا استدعاء قواعد البيانات حتى الرادار يقرأ المشترك الجديد فوراً
 from database import save_user
 from db import add_user, get_active_users, set_user_expired, get_user_by_ref_code, extend_user_expiry, assign_ref_code
 
@@ -209,7 +209,7 @@ def register_create_handlers(bot):
     @bot.callback_query_handler(func=lambda call: call.data == "skip_referral")
     def skip_ref(call):
         chat_id = call.message.chat.id
-        bot.clear_step_handler_by_chat_id(chat_id) # إلغاء انتظار الكود
+        bot.clear_step_handler_by_chat_id(chat_id) 
         ask_protocol(chat_id, bot, call.message.message_id)
 
     def check_referral_text(message, bot):
@@ -261,10 +261,41 @@ def register_create_handlers(bot):
             return
         apply_reward(chat_id, bot, sec)
 
+    # 🔥 التحديث الجذري: هاي الدالة هسه تحدث الرادار (SQLite) واللوحة (JSON) سويه 🔥
     def apply_reward(chat_id, bot, seconds):
         referrer_email = creation_data[chat_id].get('referrer')
         if referrer_email:
+            # 1. تحديث وقت المشترك في الرادار
             extend_user_expiry(referrer_email, seconds)
+            
+            # 2. تحديث وقت المشترك في ملف JSON حتى يظهر بلوحة "تفاصيل المشترك"
+            try:
+                home_dir = os.path.expanduser("~")
+                # البحث عن اسم ملف البيانات القديم
+                for json_name in ["database.json", "data.json", "users.json"]:
+                    json_path = os.path.join(home_dir, "v2ray_manager", json_name)
+                    if not os.path.exists(json_path):
+                        json_path = json_name
+                        
+                    if os.path.exists(json_path):
+                        with open(json_path, 'r', encoding='utf-8') as f:
+                            db_data = json.load(f)
+                            
+                        if referrer_email in db_data:
+                            # تحديث وقت الانتهاء
+                            for key in ['expiry_time', 'expiry_date', 'expiry']:
+                                if key in db_data[referrer_email]:
+                                    current_val = float(db_data[referrer_email][key])
+                                    db_data[referrer_email][key] = current_val + seconds
+                                    break
+                            
+                            # حفظ التحديث
+                            with open(json_path, 'w', encoding='utf-8') as f:
+                                json.dump(db_data, f, indent=4)
+                            break
+            except Exception as e:
+                print(f"Error updating JSON for reward: {e}")
+
             bot.send_message(chat_id, f"🎉 **تمت المكافأة!**\nتم تمديد صلاحية المشترك الداعي `{referrer_email}` بنجاح.", parse_mode="Markdown")
         ask_protocol(chat_id, bot)
 
