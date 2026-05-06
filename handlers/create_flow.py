@@ -10,11 +10,9 @@ import threading
 import os
 import urllib.parse
 
-# 👇 الاستدعاء الموحد: كل الدوال هسه تجي من ملف database.py الجديد فقط
-from database import (
-    save_user, extend_json_expiry, add_user, get_active_users, 
-    set_user_expired, get_user_by_ref_code, extend_user_expiry, assign_ref_code
-)
+# 👇 استدعاء دوال الحفظ + الدالة السحرية لتمديد اللوحة (JSON)
+from database import save_user, extend_json_expiry
+from db import add_user, get_active_users, set_user_expired, get_user_by_ref_code, extend_user_expiry, assign_ref_code
 
 # قاموس لحفظ بيانات الإنشاء المؤقتة
 creation_data = {}
@@ -263,20 +261,25 @@ def register_create_handlers(bot):
             return
         apply_reward(chat_id, bot, sec)
 
-    # 🔥 التحديث المزدوج للرادار (SQLite) واللوحة (JSON) 🔥
+    # 🔥 التحديث الجذري: تمديد للداعي + ريستارت مباشر لتفعيل كوده 🔥
     def apply_reward(chat_id, bot, seconds):
         referrer_email = creation_data[chat_id].get('referrer')
         if referrer_email:
-            # 1. تحديث وقت المشترك في الرادار
+            # 1. تحديث وقت المشترك في الرادار (SQLite)
             extend_user_expiry(referrer_email, seconds)
             
-            # 2. تحديث وقت المشترك في اللوحة (حتى يظهر كدامك بالتفاصيل)
+            # 2. تحديث وقت المشترك في اللوحة (JSON)
             try:
                 extend_json_expiry(referrer_email, seconds)
             except Exception as e:
                 print(f"JSON Reward Error: {e}")
 
-            bot.send_message(chat_id, f"🎉 **تمت المكافأة!**\nتم تمديد صلاحية المشترك الداعي `{referrer_email}` بنجاح.", parse_mode="Markdown")
+            bot.send_message(chat_id, f"🎉 **تمت المكافأة!**\nتم تمديد صلاحية المشترك الداعي `{referrer_email}` بنجاح.\n🔄 جاري عمل ريستارت للسيرفر لتفعيل كود الداعي...", parse_mode="Markdown")
+            
+            # 3. عمل ريستارت فوري للسيرفر حتى يشتغل كود الداعي مباشرة
+            time.sleep(1)
+            restart_alwaysdata(bot, chat_id, "✅ **تم الريستارت! كود الداعي شغال الآن 100%.** 🚀", "⚠️ التمديد نجح، بس فشل الريستارت التلقائي.")
+
         ask_protocol(chat_id, bot)
 
     # ==========================================
