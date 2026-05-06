@@ -165,3 +165,6 @@ def get_usage_stats(email, current_total_used):
     
     conn.close()
     return used_today, used_yesterday_total
+
+# 🔥 تشغيل التأسيس تلقائياً بمجرد استدعاء الملف حتى ما تصير أي أخطاء بالرادار 🔥
+init_db()
