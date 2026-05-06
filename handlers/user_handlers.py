@@ -1,16 +1,68 @@
-import sys
 import os
 import time
 import datetime
 import json
+import sqlite3
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-# 🔥 إجبار الملف على قراءة المسار الرئيسي لحل مشكلة عدم العثور على db 🔥
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# مسار قاعدة البيانات المباشر (للاستغناء عن الاستدعاء الخارجي)
+HOME_DIR = os.path.expanduser("~")
+SQLITE_DB_PATH = f'{HOME_DIR}/v2ray_manager/bot_data.db'
 
-# الاستدعاء المباشر للدوال من ملف db.py الرئيسي
-from db import link_user_subscription, get_user_subscriptions, get_subscription_details
+# ==========================================
+# 🛠️ دوال قاعدة البيانات المدمجة (مستقلة 100%)
+# ==========================================
+def link_user_subscription(chat_id, email):
+    try:
+        conn = sqlite3.connect(SQLITE_DB_PATH)
+        c = conn.cursor()
+        c.execute("SELECT email FROM users WHERE email=?", (email,))
+        if c.fetchone():
+            c.execute('''CREATE TABLE IF NOT EXISTS user_subscriptions
+                         (chat_id TEXT, email TEXT, PRIMARY KEY (chat_id, email))''')
+            try:
+                c.execute("INSERT INTO user_subscriptions (chat_id, email) VALUES (?, ?)", (str(chat_id), email))
+                conn.commit()
+                success = True
+            except sqlite3.IntegrityError:
+                success = False # مربوط مسبقاً
+        else:
+            success = False # غير موجود بالأساس
+        conn.close()
+        return success
+    except Exception as e:
+        print(f"DB Link Error: {e}")
+        return False
 
+def get_user_subscriptions(chat_id):
+    try:
+        conn = sqlite3.connect(SQLITE_DB_PATH)
+        c = conn.cursor()
+        c.execute('''CREATE TABLE IF NOT EXISTS user_subscriptions
+                     (chat_id TEXT, email TEXT, PRIMARY KEY (chat_id, email))''')
+        c.execute("SELECT email FROM user_subscriptions WHERE chat_id=?", (str(chat_id),))
+        rows = c.fetchall()
+        conn.close()
+        return [row[0] for row in rows]
+    except Exception as e:
+        print(f"DB Get Subs Error: {e}")
+        return []
+
+def get_subscription_details(email):
+    try:
+        conn = sqlite3.connect(SQLITE_DB_PATH)
+        c = conn.cursor()
+        c.execute("SELECT expiry_date, quota_bytes, status, last_seen, total_connection_seconds FROM users WHERE email=?", (email,))
+        data = c.fetchone()
+        conn.close()
+        return data
+    except Exception as e:
+        print(f"DB Details Error: {e}")
+        return None
+
+# ==========================================
+# 📱 أوامر البوت للمشتركين العاديين
+# ==========================================
 def register_user_handlers(bot):
     @bot.callback_query_handler(func=lambda call: call.data == "add_user_sub")
     def add_sub_callback(call):
@@ -30,13 +82,12 @@ def process_add_sub(message, bot):
     email = message.text.strip()
     chat_id = message.chat.id
     try:
-        # استخدام الدالة المستدعاة مباشرة
         success = link_user_subscription(chat_id, email)
         
         if success:
             bot.send_message(chat_id, f"✅ **تم إضافة الحساب بنجاح!**\nتم ربط الاشتراك `{email}` بحسابك.", parse_mode="Markdown")
         else:
-            bot.send_message(chat_id, "❌ **عذراً!** إما أن الاسم غير صحيح، أو أنه مربوط بحسابك مسبقاً.", parse_mode="Markdown")
+            bot.send_message(chat_id, "❌ **عذراً!** إما أن الاسم غير صحيح، أو أنه مربوط بحساب آخر مسبقاً.", parse_mode="Markdown")
     except Exception as e:
         bot.send_message(chat_id, f"⚠️ حدث خطأ أثناء ربط الحساب: {e}")
     
@@ -49,7 +100,6 @@ def show_user_main_menu(bot, chat_id, message_id=None):
         
         markup.add(InlineKeyboardButton("➕ إضافة حساب اشتراك", callback_data="add_user_sub"))
         
-        # إضافة أزرار للاشتراكات المربوطة
         for sub in subs:
             markup.add(InlineKeyboardButton(f"👤 {sub}", callback_data=f"view_sub_{sub}"))
             
@@ -75,9 +125,8 @@ def show_sub_details(bot, chat_id, email, message_id):
         # 1. جلب الاستهلاك الفعلي بدقة (من ملف JSON)
         used_bytes = 0
         try:
-            home_dir = os.path.expanduser("~")
             for json_name in ["users_db.json", "database.json", "data.json"]:
-                db_path = os.path.join(home_dir, "v2ray_manager", json_name)
+                db_path = os.path.join(HOME_DIR, "v2ray_manager", json_name)
                 if os.path.exists(db_path):
                     with open(db_path, 'r', encoding='utf-8') as f:
                         db_data = json.load(f)
@@ -106,7 +155,8 @@ def show_sub_details(bot, chat_id, email, message_id):
             time_str = f"{days} يوم و {hours} ساعة"
             status_icon = "🟢 نشط" if status == 'active' else "🔴 متوقف"
         
-        # 3. فورمات الوقت الكلي
+        # 3. فورمات الوقت الكلي (مع الحماية من القيم الفارغة)
+        total_sec = total_sec or 0
         total_hours = int(total_sec // 3600)
         total_mins = int((total_sec % 3600) // 60)
         
