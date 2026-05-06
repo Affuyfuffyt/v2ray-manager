@@ -14,17 +14,20 @@ from handlers import user_handlers # 👈 ملف واجهة المشتركين �
 # استدعاء المراقبين (نظام الطرد، الرادار، ونظام التنبيهات الذكي)
 from quota_monitor import start_quota_monitor 
 from radar_monitor import start_radar_monitor 
-from user_notifier import start_notifier # 👈 ملف تنبيهات المشتركين الجديد
+try:
+    from user_notifier import start_notifier # 👈 ملف تنبيهات المشتركين الجديد
+except ImportError:
+    def start_notifier(bot): pass
 
 # 1. تهيئة البوت والـ API
 bot = telebot.TeleBot(config.BOT_TOKEN)
 api = PanelAPI()
 
-# 2. إضافة فلتر الحماية (للأدمن فقط)
+# 2. إضافة فلتر الحماية (نستخدمه فقط للأزرار الخاصة بالإدارة)
 class IsAdmin(telebot.custom_filters.SimpleCustomFilter):
     key = 'is_admin'
     def check(self, message):
-        return message.chat.id == config.ADMIN_ID
+        return str(message.chat.id) == str(config.ADMIN_ID)
 
 bot.add_custom_filter(IsAdmin())
 
@@ -85,13 +88,19 @@ speed_test.register_speed_handlers(bot)
 radar_flow.register_radar_handlers(bot)
 user_handlers.register_user_handlers(bot) # 👈 تسجيل أزرار واجهة العميل
 
-# 👈 فصل ذكي بين الأدمن والعميل
+# 🔥 التحديث الجذري: فتح أمر البداية للكل وتوجيه كل شخص للوحته الخاصة 🔥
+# لاحظ: مسحنا is_admin=True من هنا حتى الكل يكدر يضغط start
 @bot.message_handler(commands=['start'])
-def start(message):
-    if message.chat.id == config.ADMIN_ID:
-        admin_start.show_main_menu(bot, message.chat.id)
+def start_command(message):
+    chat_id = message.chat.id
+    
+    # 1. إذا كان الشخص هو الأدمن ⬅️ تطلعله لوحة الإدارة
+    if str(chat_id) == str(config.ADMIN_ID):
+        admin_start.show_main_menu(bot, chat_id)
+        
+    # 2. إذا كان شخص عادي ⬅️ تطلعله لوحة خدمة العملاء
     else:
-        user_handlers.show_user_main_menu(bot, message.chat.id)
+        user_handlers.show_user_main_menu(bot, chat_id)
 
 @bot.callback_query_handler(func=lambda call: call.data == "server_status", is_admin=True)
 def send_server_status(call):
@@ -156,6 +165,7 @@ if __name__ == "__main__":
     print("📡 نظام الرادار ومراقبة الوقت يعملان الآن بالخلفية...")
     
     try:
-        bot.infinity_polling()
+        # إضافة timeout حتى ما يفصل البوت بالشبكات الضعيفة
+        bot.infinity_polling(timeout=60, long_polling_timeout=60)
     except Exception as e:
         print(f"❌ حدث خطأ في البوت: {e}")
