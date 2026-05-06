@@ -2,6 +2,7 @@ import json
 import os
 import sqlite3
 import datetime
+import time
 
 # تحديد مسارات قواعد البيانات (الـ JSON والـ SQLite)
 home_dir = os.path.expanduser('~')
@@ -46,6 +47,17 @@ def renew_user(email, extra_bytes, new_expiry):
         return True
     return False
 
+# 🔥 الدالة السحرية لتمديد وقت اللوحة (مكافأة الدعوات) 🔥
+def extend_json_expiry(email, extra_seconds):
+    data = load_db()
+    if email in data:
+        current_expiry = data[email].get('expiry_time', time.time())
+        data[email]['expiry_time'] = current_expiry + extra_seconds
+        data[email]['is_active'] = True
+        update_db(data)
+        return True
+    return False
+
 
 # ==========================================
 # 2️⃣ قسم قاعدة بيانات SQLite (لعمل المراقب الذكي والـ Radar)
@@ -58,15 +70,20 @@ def init_sqlite_db():
     c.execute('''CREATE TABLE IF NOT EXISTS daily_usage
                  (email TEXT, date TEXT, total_used REAL)''')
     
-    # 🔥 إضافة حقول الرادار بدون مسح البيانات القديمة 🔥
     try:
         c.execute("ALTER TABLE users ADD COLUMN last_seen TEXT")
     except:
-        pass # الحقل موجود مسبقاً
+        pass 
     try:
         c.execute("ALTER TABLE users ADD COLUMN total_connection_seconds REAL DEFAULT 0")
     except:
-        pass # الحقل موجود مسبقاً
+        pass 
+        
+    # 🔥 إضافة حقل كود الدعوة للمشتركين 🔥
+    try:
+        c.execute("ALTER TABLE users ADD COLUMN ref_code TEXT")
+    except:
+        pass
 
     conn.commit()
     conn.close()
@@ -74,14 +91,12 @@ def init_sqlite_db():
 def add_user(email, uuid, port, quota_bytes, expiry_date):
     conn = sqlite3.connect(SQLITE_DB_PATH)
     c = conn.cursor()
-    # نتحقق إذا المشترك موجود نحدث بس بياناته الأساسية حتى ما يتصفر وقته بالرادار
     c.execute("SELECT email FROM users WHERE email=?", (email,))
     if c.fetchone():
         c.execute("UPDATE users SET uuid=?, port=?, quota_bytes=?, expiry_date=?, status='active' WHERE email=?",
                   (uuid, port, quota_bytes, str(expiry_date), email))
     else:
-        # إذا مشترك جديد، ننزله مع تصفير الرادار
-        c.execute("INSERT INTO users (email, uuid, port, quota_bytes, expiry_date, status, last_seen, total_connection_seconds) VALUES (?, ?, ?, ?, ?, ?, NULL, 0)", 
+        c.execute("INSERT INTO users (email, uuid, port, quota_bytes, expiry_date, status, last_seen, total_connection_seconds, ref_code) VALUES (?, ?, ?, ?, ?, ?, NULL, 0, NULL)", 
                   (email, uuid, port, quota_bytes, str(expiry_date), 'active'))
     conn.commit()
     conn.close()
@@ -102,13 +117,44 @@ def set_user_expired(email):
     conn.close()
 
 # ==========================================
+# 🎁 دوال المكافآت والدعوات (الجديدة للـ SQLite) 🎁
+# ==========================================
+def assign_ref_code(email, ref_code):
+    conn = sqlite3.connect(SQLITE_DB_PATH)
+    c = conn.cursor()
+    c.execute("UPDATE users SET ref_code=? WHERE email=?", (ref_code, email))
+    conn.commit()
+    conn.close()
+
+def get_user_by_ref_code(ref_code):
+    conn = sqlite3.connect(SQLITE_DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT email, expiry_date FROM users WHERE ref_code=?", (ref_code,))
+    data = c.fetchone()
+    conn.close()
+    return data
+
+def extend_user_expiry(email, extra_seconds):
+    conn = sqlite3.connect(SQLITE_DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT expiry_date FROM users WHERE email=?", (email,))
+    data = c.fetchone()
+    if data and data[0]:
+        current_expiry = float(data[0])
+        new_expiry = current_expiry + extra_seconds
+        c.execute("UPDATE users SET expiry_date=?, status='active' WHERE email=?", (str(new_expiry), email))
+        conn.commit()
+        conn.close()
+        return new_expiry
+    return None
+
+# ==========================================
 # 📡 دوال الرادار الجديدة (Radar Functions)
 # ==========================================
 def update_radar_data(email):
     conn = sqlite3.connect(SQLITE_DB_PATH)
     c = conn.cursor()
     now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    # يضيف 60 ثانية (دقيقة) لوقت المشترك المتصل ويحدث آخر ظهور
     c.execute("UPDATE users SET last_seen=?, total_connection_seconds = COALESCE(total_connection_seconds, 0) + 60 WHERE email=?", (now_str, email))
     conn.commit()
     conn.close()
