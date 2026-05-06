@@ -48,16 +48,30 @@ echo "AD_SITE_ID=$AD_SITE_ID" >> .env
 echo "AD_DOMAIN=$AD_DOMAIN" >> .env
 
 # 🔥 الإضافة الذكية: تجهيز ملف الريستارت التلقائي والدومين العالمي
-# السكربت راح يأخذ الـ Site ID والـ API والدومين ويحفظهن بملف مستقل حتى يقراهن البوت
 echo "$AD_SITE_ID" > $HOME/alwaysdata_keys.txt
 echo "$AD_API_KEY" >> $HOME/alwaysdata_keys.txt
 echo "$AD_DOMAIN" >> $HOME/alwaysdata_keys.txt
 
-# 8. تثبيت المكاتب وتشغيل البوت
-echo "[+] جاري تثبيت المتطلبات وتشغيل البوت..."
+# 8. تثبيت المكاتب
+echo "[+] جاري تثبيت المتطلبات..."
 pip install -r requirements.txt
+
+# 🔥 9. إنشاء ملف المراقب الأبدي (Keep Alive) 🔥
+cat << 'EOF' > $HOME/keep_alive.sh
+#!/bin/bash
+if ! pgrep -f "run.py" > /dev/null
+then
+    echo "البوت كان متوقف... جاري إعادة تشغيله."
+    cd $HOME/v2ray_manager
+    nohup python3 run.py > system.log 2>&1 &
+fi
+EOF
+chmod +x $HOME/keep_alive.sh
+
+# تشغيل البوت لأول مرة
 nohup python3 run.py > system.log 2>&1 &
 
 echo "=================================================="
 echo "✅ تم التثبيت والربط بـ API المنصة بنجاح!"
+echo "⚠️ خطوة أخيرة مهمة: قم بإضافة $HOME/keep_alive.sh إلى Scheduled Tasks في لوحة Alwaysdata ليعمل كل 5 دقائق."
 echo "=================================================="
