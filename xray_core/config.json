@@ -1,7 +1,7 @@
 {
   "log": {
-    "access": "/home/placeholder/xray_core/access.log",
-    "error": "/home/placeholder/xray_core/error.log",
+    "access": "/home/placeholder_user/node_placeholder/access.log",
+    "error": "/home/placeholder_user/node_placeholder/error.log",
     "loglevel": "warning"
   },
   "stats": {},
@@ -31,7 +31,7 @@
   "inbounds": [
     {
       "tag": "vless_tcp_fallback",
-      "port": 8100,
+      "port": 8300,
       "listen": "::",
       "protocol": "vless",
       "settings": {
@@ -40,15 +40,15 @@
         "fallbacks": [
           {
             "path": "/Telegram-@338888-vless",
-            "dest": 8101
+            "dest": 8301
           },
           {
             "path": "/Telegram-@338888-vmess",
-            "dest": 8102
+            "dest": 8302
           },
           {
             "path": "/Telegram-@338888-trojan",
-            "dest": 8103
+            "dest": 8303
           }
         ]
       },
@@ -58,7 +58,7 @@
     },
     {
       "tag": "vless",
-      "port": 8101,
+      "port": 8301,
       "listen": "127.0.0.1",
       "protocol": "vless",
       "settings": {
@@ -74,7 +74,7 @@
     },
     {
       "tag": "vmess",
-      "port": 8102,
+      "port": 8302,
       "listen": "127.0.0.1",
       "protocol": "vmess",
       "settings": {
@@ -89,7 +89,7 @@
     },
     {
       "tag": "trojan",
-      "port": 8103,
+      "port": 8303,
       "listen": "127.0.0.1",
       "protocol": "trojan",
       "settings": {
