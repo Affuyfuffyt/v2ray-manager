@@ -6,7 +6,7 @@ import time
 
 # 🔥 اكتشاف المسار الأساسي وبناء مسار العقدة المعزولة تلقائياً 🔥
 HOME_DIR = os.path.expanduser("~")
-LOCAL_USER = os.path.basename(HOME_DIR) # يستخرج اسم الحساب، مثلاً linkapp
+LOCAL_USER = os.path.basename(HOME_DIR) # يستخرج اسم الحساب الحالي
 # توجيه البانيل للعمل على المجلد المعزول الخاص بهذا السيرفر
 CONFIG_PATH = f'{HOME_DIR}/node_{LOCAL_USER}/config.json'
 
@@ -26,8 +26,7 @@ class PanelAPI:
             with open(CONFIG_PATH, 'r') as f:
                 config = json.load(f)
             
-            # 🔥 تصحيح مسار اللوكات التلقائي (بالاعتماد على المجلد المعزول) 🔥
-            # حتى لو نسخت ملف كونفك من غير سيرفر، البوت راح يصححه لمجلد العقدة الحالية
+            # 🔥 تصحيح مسار اللوكات التلقائي (بالاعتماد على المجلد المعزول حصراً) 🔥
             if "log" in config:
                 expected_access = f"{HOME_DIR}/node_{LOCAL_USER}/access.log"
                 expected_error = f"{HOME_DIR}/node_{LOCAL_USER}/error.log"
