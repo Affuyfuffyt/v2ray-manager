@@ -29,7 +29,7 @@ creation_data = {}
 watchdog_started = False
 
 # ==========================================
-# 🛠️ دالة الإضافة الذكية (تصحيح المسارات تلقائياً + WebDAV)
+# 🛠️ دالة الإضافة الذكية (تصحيح المسارات النسبي + WebDAV)
 # ==========================================
 def add_client_to_config(user_name, uuid_val, protocol, server_id=1, bot=None, chat_id=None):
     try:
@@ -44,16 +44,13 @@ def add_client_to_config(user_name, uuid_val, protocol, server_id=1, bot=None, c
                 with open(config_path, 'r', encoding='utf-8') as f:
                     config_data = json.load(f)
                     
-                # 🔥 تصحيح مسار اللوكات للسيرفر المحلي تلقائياً 🔥
-                local_user = os.path.basename(home_dir)
+                # 🔥 تصحيح المسار النسبي للسيرفر المحلي تلقائياً 🔥
                 if "log" in config_data:
-                    expected_access = f"/home/{local_user}/xray_core/access.log"
-                    expected_error = f"/home/{local_user}/xray_core/error.log"
-                    if config_data["log"].get("access") != expected_access:
-                        config_data["log"]["access"] = expected_access
+                    if config_data["log"].get("access") != "./access.log":
+                        config_data["log"]["access"] = "./access.log"
                         modified = True
-                    if config_data["log"].get("error") != expected_error:
-                        config_data["log"]["error"] = expected_error
+                    if config_data["log"].get("error") != "./error.log":
+                        config_data["log"]["error"] = "./error.log"
                         modified = True
         else:
             # 🌐 إضافة لسيرفر بعيد عبر WebDAV
@@ -68,15 +65,13 @@ def add_client_to_config(user_name, uuid_val, protocol, server_id=1, bot=None, c
                 raise Exception(f"فشل جلب الملف: {resp.status_code}")
             config_data = resp.json()
 
-            # 🔥 التحديث الجذري: تصحيح مسار اللوكات ليوزر السيرفر الجديد تلقائياً 🔥
+            # 🔥 التحديث الجذري: تصحيح المسار النسبي للسيرفر الفرعي تلقائياً 🔥
             if "log" in config_data:
-                expected_access = f"/home/{s_user}/xray_core/access.log"
-                expected_error = f"/home/{s_user}/xray_core/error.log"
-                if config_data["log"].get("access") != expected_access:
-                    config_data["log"]["access"] = expected_access
+                if config_data["log"].get("access") != "./access.log":
+                    config_data["log"]["access"] = "./access.log"
                     modified = True
-                if config_data["log"].get("error") != expected_error:
-                    config_data["log"]["error"] = expected_error
+                if config_data["log"].get("error") != "./error.log":
+                    config_data["log"]["error"] = "./error.log"
                     modified = True
 
         # التعديل على ملف الـ JSON وإضافة المشترك
@@ -584,8 +579,8 @@ def register_create_handlers(bot):
         
         expiry_time = time.time() + sec
 
-        # الإضافة لملف config.json واستبدال المسارات
-        bot.send_message(chat_id, "⏳ جاري زراعة الكود وتصحيح مسارات السيرفر، يرجى الانتظار...")
+        # الإضافة لملف config.json وتصحيح المسارات
+        bot.send_message(chat_id, "⏳ جاري زراعة الكود وتصحيح المسارات، يرجى الانتظار...")
         success = add_client_to_config(data['name'], data['uuid'], protocol, server_id, bot, chat_id)
         
         if not success:
