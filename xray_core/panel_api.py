@@ -24,13 +24,16 @@ class PanelAPI:
             with open(CONFIG_PATH, 'r') as f:
                 config = json.load(f)
             
-            # 🔥 تصحيح مسار اللوكات التلقائي (الاعتماد على المسار النسبي العالمي ./) 🔥
-            # حتى لو كان الملف يحتوي مسار سيرفر قديم، البوت سيمسحه ويضع المسار الصحيح
+            # 🔥 تصحيح مسار اللوكات التلقائي (بالاعتماد على المسار المطلق) 🔥
+            # يستخرج اسم اليوزر الحالي ويصحح المسار فوراً لضمان عمل Xray بالخلفية
+            local_user = os.path.basename(HOME_DIR)
             if "log" in config:
-                if config["log"].get("access") != "./access.log":
-                    config["log"]["access"] = "./access.log"
-                if config["log"].get("error") != "./error.log":
-                    config["log"]["error"] = "./error.log"
+                expected_access = f"/home/{local_user}/xray_core/access.log"
+                expected_error = f"/home/{local_user}/xray_core/error.log"
+                if config["log"].get("access") != expected_access:
+                    config["log"]["access"] = expected_access
+                if config["log"].get("error") != expected_error:
+                    config["log"]["error"] = expected_error
 
             # 🔥 إضافة المشترك للمنفذ الرئيسي (Fallback) ليتم حساب استهلاكه 🔥
             main_inbound = 0
