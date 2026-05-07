@@ -4,7 +4,9 @@ import requests
 from dotenv import load_dotenv
 import time
 
-CONFIG_PATH = '/home/wathfor/xray_core/config.json'
+# 🔥 التعديل الذكي: اكتشاف مسار السيرفر تلقائياً بدلاً من كتابة الاسم يدوياً 🔥
+HOME_DIR = os.path.expanduser("~")
+CONFIG_PATH = f'{HOME_DIR}/xray_core/config.json'
 
 class PanelAPI:
     def __init__(self):
