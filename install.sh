@@ -14,6 +14,7 @@ read -p "👑 أدخل الآيدي الخاص بك: " ADMIN_ID
 read -p "🛠️ أدخل Alwaysdata API Key: " AD_API_KEY
 read -p "🆔 أدخل Site ID الخاص بك: " AD_SITE_ID
 read -p "🌐 أدخل الدومين الخاص بك (مثال: google.com): " AD_DOMAIN
+read -p "👤 أدخل FTP User (اسم حسابك في Alwaysdata): " FTP_USER
 
 # 3. تجهيز المجلدات
 WORK_DIR="$HOME/v2ray_manager"
@@ -37,8 +38,12 @@ echo "[+] جاري سحب ملفات البوت..."
 git clone https://github.com/Affuyfuffyt/v2ray-manager.git $WORK_DIR
 cd $WORK_DIR
 
-# 6. نقل ملف config.json للمكان الصحيح
+# 6. نقل ملف config.json للمكان الصحيح وتصحيح المسارات 🔥
 cp xray_core/config.json $XRAY_DIR/config.json
+
+echo "[+] جاري تصحيح مسارات السيرفر المحلي لتعمل مع حساب: $FTP_USER"
+sed -i "s/wathfor/$FTP_USER/g" $XRAY_DIR/config.json
+sed -i "s/wathfor/$FTP_USER/g" $WORK_DIR/xray_core/panel_api.py
 
 # 7. تخزين كل المفاتيح في ملف البيئة المخفي
 echo "BOT_TOKEN=$BOT_TOKEN" > .env
@@ -46,6 +51,7 @@ echo "ADMIN_ID=$ADMIN_ID" >> .env
 echo "AD_API_KEY=$AD_API_KEY" >> .env
 echo "AD_SITE_ID=$AD_SITE_ID" >> .env
 echo "AD_DOMAIN=$AD_DOMAIN" >> .env
+echo "FTP_USER=$FTP_USER" >> .env
 
 # 🔥 الإضافة الذكية: تجهيز ملف الريستارت التلقائي والدومين العالمي
 echo "$AD_SITE_ID" > $HOME/alwaysdata_keys.txt
@@ -72,6 +78,6 @@ chmod +x $HOME/keep_alive.sh
 nohup python3 run.py > system.log 2>&1 &
 
 echo "=================================================="
-echo "✅ تم التثبيت والربط بـ API المنصة بنجاح!"
+echo "✅ تم التثبيت والربط بـ API المنصة وتصحيح المسارات بنجاح!"
 echo "⚠️ خطوة أخيرة مهمة: قم بإضافة $HOME/keep_alive.sh إلى Scheduled Tasks في لوحة Alwaysdata ليعمل كل 5 دقائق."
 echo "=================================================="
