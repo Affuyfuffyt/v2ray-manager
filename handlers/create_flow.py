@@ -49,10 +49,9 @@ def add_client_to_config(user_name, uuid_val, protocol, server_id=1, bot=None, c
             if not server: return False
             s_id, s_name, s_site_id, s_api, s_host, s_user, s_pass = server
             
-            # رابط WebDAV الخاص بـ Alwaysdata (أسرع ومفتوح دائماً)
+            # رابط WebDAV الخاص بـ Alwaysdata
             webdav_url = f"https://webdav-{s_user}.alwaysdata.net/xray_core/config.json"
             
-            # جلب الملف
             resp = requests.get(webdav_url, auth=(s_user, s_pass))
             if resp.status_code != 200:
                 raise Exception(f"فشل جلب الملف: {resp.status_code}")
@@ -86,8 +85,10 @@ def add_client_to_config(user_name, uuid_val, protocol, server_id=1, bot=None, c
                 with open(config_path, 'w', encoding='utf-8') as f:
                     json.dump(config_data, f, indent=4)
             else:
-                # حفظ الملف بالسيرفر البعيد
-                put_resp = requests.put(webdav_url, auth=(s_user, s_pass), json=config_data)
+                # 🔥 ضمان رفع الملف كـ بيانات خام لتفادي مشاكل WebDAV
+                headers = {'Content-Type': 'application/json'}
+                data_bytes = json.dumps(config_data, indent=4).encode('utf-8')
+                put_resp = requests.put(webdav_url, auth=(s_user, s_pass), data=data_bytes, headers=headers)
                 if put_resp.status_code not in (200, 201, 204):
                     raise Exception(f"فشل حفظ الملف: {put_resp.status_code}")
         return True
@@ -134,7 +135,9 @@ def remove_client_from_config(uuid_val, server_id=1):
                 with open(config_path, 'w', encoding='utf-8') as f:
                     json.dump(config_data, f, indent=4)
             else:
-                requests.put(webdav_url, auth=(s_user, s_pass), json=config_data)
+                headers = {'Content-Type': 'application/json'}
+                data_bytes = json.dumps(config_data, indent=4).encode('utf-8')
+                requests.put(webdav_url, auth=(s_user, s_pass), data=data_bytes, headers=headers)
     except Exception as e:
         print(f"Error removing from config: {e}")
 
@@ -596,6 +599,7 @@ def register_create_handlers(bot):
         host_domain = "wathfor.alwaysdata.net" 
         
         srv = None
+        # 🔥 التحديث الجذري: استخراج الدومين من FTP Host مباشرة 🔥
         if server_id == 1:
             try:
                 home_dir = os.path.expanduser("~")
@@ -608,7 +612,15 @@ def register_create_handlers(bot):
             except: pass
         else:
             srv = get_server_details(server_id)
-            if srv: host_domain = f"{srv[5]}.alwaysdata.net"
+            if srv:
+                # srv[4] هو حقل FTP Host اللي أنت دخلته (مثال: ftp-linkapp.alwaysdata.net أو linkapp.alwaysdata.net)
+                raw_host = srv[4].strip()
+                if raw_host.startswith("ftp-"):
+                    host_domain = raw_host.replace("ftp-", "")
+                elif raw_host.startswith("ssh-"):
+                    host_domain = raw_host.replace("ssh-", "")
+                else:
+                    host_domain = raw_host
         
         if selected_port == 443:
             security_type = "tls"
