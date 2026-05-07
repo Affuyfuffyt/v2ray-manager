@@ -4,35 +4,35 @@ import requests
 from dotenv import load_dotenv
 import time
 
-# 🔥 التعديل الذكي: اكتشاف مسار السيرفر تلقائياً بدلاً من كتابة الاسم يدوياً 🔥
+# 🔥 اكتشاف المسار الأساسي تلقائياً 🔥
 HOME_DIR = os.path.expanduser("~")
 CONFIG_PATH = f'{HOME_DIR}/xray_core/config.json'
 
 class PanelAPI:
     def __init__(self):
-        # تحميل المفاتيح من ملف .env المخفي للاتصال الرسمي بالمنصة
+        # تحميل المفاتيح للاتصال المستقبلي إذا لزم الأمر
         load_dotenv()
         self.api_key = os.getenv('AD_API_KEY')
         self.site_id = os.getenv('AD_SITE_ID')
 
     def create_client(self, email, uuid, protocol="vless"):
         try:
+            if not os.path.exists(CONFIG_PATH):
+                print(f"❌ Error: Config file not found at {CONFIG_PATH}")
+                return False
+
             with open(CONFIG_PATH, 'r') as f:
                 config = json.load(f)
             
-            # 🔥 تصحيح مسار اللوكات التلقائي للسيرفر المحلي (Auto-Healing) 🔥
-            # يستخرج اسم اليوزر الحالي (مثلاً linkapp) ويصحح المسار فوراً
-            local_user = os.path.basename(HOME_DIR)
+            # 🔥 تصحيح مسار اللوكات التلقائي (الاعتماد على المسار النسبي العالمي ./) 🔥
+            # حتى لو كان الملف يحتوي مسار سيرفر قديم، البوت سيمسحه ويضع المسار الصحيح
             if "log" in config:
-                expected_access = f"/home/{local_user}/xray_core/access.log"
-                expected_error = f"/home/{local_user}/xray_core/error.log"
-                if config["log"].get("access") != expected_access:
-                    config["log"]["access"] = expected_access
-                if config["log"].get("error") != expected_error:
-                    config["log"]["error"] = expected_error
+                if config["log"].get("access") != "./access.log":
+                    config["log"]["access"] = "./access.log"
+                if config["log"].get("error") != "./error.log":
+                    config["log"]["error"] = "./error.log"
 
-            # 🔥 تعديل حاسم: إضافة اليوزرات للـ Fallback (المنفذ الرئيسي 8100) ليتم حسابهم 🔥
-            # حتى لو كان اتصالهم WS، البورت الرئيسي هو الذي يمسك الترافيك الحقيقي
+            # 🔥 إضافة المشترك للمنفذ الرئيسي (Fallback) ليتم حساب استهلاكه 🔥
             main_inbound = 0
             
             if protocol == "vless" or protocol == "vmess":
@@ -42,25 +42,20 @@ class PanelAPI:
             else:
                 new_client = {"id": uuid, "email": email, "level": 0}
 
-            # إضافة المشترك للـ Fallback (البوابة الرئيسية)
+            # الإضافة للبوابة الرئيسية
             clients_main = config['inbounds'][main_inbound]['settings']['clients']
             if not any(c.get('email') == email for c in clients_main):
                 clients_main.append(new_client)
 
-            # إضافته للـ WS Inbound الخاص به لكي يعمل الاتصال (كودك الأصلي)
-            if protocol == "vless":
-                target_inbound = 1
-            elif protocol == "vmess":
-                target_inbound = 2
-            elif protocol == "trojan":
-                target_inbound = 3
-            else:
-                target_inbound = 1
+            # الإضافة للمسار الخاص بالبروتوكول (WS)
+            target_map = {"vless": 1, "vmess": 2, "trojan": 3}
+            target_inbound = target_map.get(protocol.lower(), 1)
             
             clients_ws = config['inbounds'][target_inbound]['settings']['clients']
             if not any(c.get('email') == email for c in clients_ws):
                 clients_ws.append(new_client)
             
+            # حفظ الملف بعد التعديل والتصحيح
             with open(CONFIG_PATH, 'w') as f:
                 json.dump(config, f, indent=2)
             
@@ -71,13 +66,9 @@ class PanelAPI:
             return False
 
     def restart_xray(self):
-        # 1. الضربة القاضية: نقتل العملية فوراً لقطع النت عن المنتهية صلاحيتهم
+        # 1. إيقاف المحرك لقطع الاتصال عن المنتهين وإجبار السيرفر على إعادة التشغيل
         os.system("pkill -9 xray")
         time.sleep(0.5)
-        
-        # 2. التشغيل القانوني: نطلب من منصة Alwaysdata تشغيل الموقع رسمياً
-        # بما أننا حولنا Xray لـ Service، إعادة التشغيل هنا غير ضرورية للخدمة، لكنها مهمة لقتل القديم
-        # لأن الـ Service ستقوم بتشغيله تلقائياً بعد أن تقتله أنت.
         return True
 
     def get_client_traffic(self, email):
@@ -89,13 +80,12 @@ class PanelAPI:
                 config = json.load(f)
             
             changed = False
-            # البحث في جميع الـ inbounds وحذف المشترك (من الرئيسي والـ WS)
-            for i in range(4): # غيرناها لـ 4 لكي تشمل الـ Fallback (0)
+            # البحث وحذف المشترك من جميع البوابات (من 0 إلى 3)
+            for i in range(4): 
                 try:
                     clients = config['inbounds'][i]['settings']['clients']
                     if not enable:
                         original_len = len(clients)
-                        # حذف المشترك
                         config['inbounds'][i]['settings']['clients'] = [c for c in clients if c.get('email') != email]
                         if len(config['inbounds'][i]['settings']['clients']) != original_len:
                             changed = True
