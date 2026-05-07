@@ -20,6 +20,17 @@ class PanelAPI:
             with open(CONFIG_PATH, 'r') as f:
                 config = json.load(f)
             
+            # 🔥 تصحيح مسار اللوكات التلقائي للسيرفر المحلي (Auto-Healing) 🔥
+            # يستخرج اسم اليوزر الحالي (مثلاً linkapp) ويصحح المسار فوراً
+            local_user = os.path.basename(HOME_DIR)
+            if "log" in config:
+                expected_access = f"/home/{local_user}/xray_core/access.log"
+                expected_error = f"/home/{local_user}/xray_core/error.log"
+                if config["log"].get("access") != expected_access:
+                    config["log"]["access"] = expected_access
+                if config["log"].get("error") != expected_error:
+                    config["log"]["error"] = expected_error
+
             # 🔥 تعديل حاسم: إضافة اليوزرات للـ Fallback (المنفذ الرئيسي 8100) ليتم حسابهم 🔥
             # حتى لو كان اتصالهم WS، البورت الرئيسي هو الذي يمسك الترافيك الحقيقي
             main_inbound = 0
