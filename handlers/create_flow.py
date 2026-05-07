@@ -9,7 +9,6 @@ import requests
 import threading
 import os
 import urllib.parse
-import paramiko # 🔥 مكتبة الـ SSH الجديدة 🔥
 
 # 👇 استدعاء دوال الحفظ وقاعدة البيانات
 from database import save_user, extend_json_expiry
@@ -30,11 +29,12 @@ creation_data = {}
 watchdog_started = False
 
 # ==========================================
-# 🛠️ دالة الإضافة الذكية (عبر SSH المباشر للسيرفر البعيد)
+# 🛠️ دالة الإضافة الذكية (عبر WebDAV المباشر والمفتوح)
 # ==========================================
 def add_client_to_config(user_name, uuid_val, protocol, server_id=1, bot=None, chat_id=None):
     try:
         modified = False
+        config_data = {}
 
         if server_id == 1:
             # 📌 إضافة للسيرفر المحلي (نفس السيرفر)
@@ -43,91 +43,66 @@ def add_client_to_config(user_name, uuid_val, protocol, server_id=1, bot=None, c
             if os.path.exists(config_path):
                 with open(config_path, 'r', encoding='utf-8') as f:
                     config_data = json.load(f)
-                
-                # التعديل المحلي
-                if "inbounds" in config_data:
-                    for inbound in config_data["inbounds"]:
-                        if inbound.get("protocol") == "trojan" and "settings" in inbound:
-                            clients = inbound["settings"].setdefault("clients", [])
-                            for c in clients:
-                                if "id" in c: 
-                                    c["password"] = c.pop("id")
-                                    modified = True
-
-                        if inbound.get("tag") == protocol and "settings" in inbound:
-                            clients = inbound["settings"].setdefault("clients", [])
-                            exists = any(c.get("id") == uuid_val or c.get("password") == uuid_val for c in clients)
-                            if not exists:
-                                if protocol == "vless":
-                                    clients.append({"id": uuid_val, "email": user_name, "flow": ""})
-                                elif protocol == "vmess":
-                                    clients.append({"id": uuid_val, "email": user_name, "alterId": 0})
-                                elif protocol == "trojan":
-                                    clients.append({"password": uuid_val, "email": user_name})
-                                modified = True
-                            break 
-                
-                if modified:
-                    with open(config_path, 'w', encoding='utf-8') as f:
-                        json.dump(config_data, f, indent=4)
-                return True
-
         else:
-            # 🌐 إضافة لسيرفر بعيد عبر SSH المباشر (أسرع وأكثر استقراراً من FTP)
+            # 🌐 إضافة لسيرفر بعيد عبر WebDAV (HTTPS)
             server = get_server_details(server_id)
             if not server: return False
             s_id, s_name, s_site_id, s_api, s_host, s_user, s_pass = server
             
-            # استخراج الهوست الصحيح للـ SSH (عكس الـ FTP)
-            ssh_host = s_host.replace('ftp-', 'ssh-')
+            # رابط WebDAV الخاص بـ Alwaysdata (أسرع ومفتوح دائماً)
+            webdav_url = f"https://webdav-{s_user}.alwaysdata.net/xray_core/config.json"
             
-            # إنشاء سكربت بايثون صغير نرسله للسيرفر البعيد حتى ينفذه بداخله
-            # هذا السكربت يقرأ ملف الـ config، يضيف المستخدم، ويحفظه فوراً
-            python_script = f"""
-import json, os
-config_path = os.path.expanduser('~/xray_core/config.json')
-try:
-    with open(config_path, 'r') as f: data = json.load(f)
-    for inbound in data.get('inbounds', []):
-        if inbound.get('tag') == '{protocol}' and 'settings' in inbound:
-            clients = inbound['settings'].setdefault('clients', [])
-            if '{protocol}' == 'vless': clients.append({{"id": "{uuid_val}", "email": "{user_name}", "flow": ""}})
-            elif '{protocol}' == 'vmess': clients.append({{"id": "{uuid_val}", "email": "{user_name}", "alterId": 0}})
-            elif '{protocol}' == 'trojan': clients.append({{"password": "{uuid_val}", "email": "{user_name}"}})
-            break
-    with open(config_path, 'w') as f: json.dump(data, f, indent=4)
-    print('SUCCESS')
-except Exception as e:
-    print(f'ERROR: {{e}}')
-"""
-            # الاتصال عبر SSH
-            client = paramiko.SSHClient()
-            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            client.connect(hostname=ssh_host, username=s_user, password=s_pass)
-            
-            # تنفيذ السكربت في السيرفر البعيد
-            command = f"python -c \"{python_script}\""
-            stdin, stdout, stderr = client.exec_command(command)
-            result = stdout.read().decode().strip()
-            client.close()
-            
-            if "SUCCESS" in result:
-                return True
-            else:
-                error = stderr.read().decode()
-                raise Exception(f"SSH Error: {error}")
+            # جلب الملف
+            resp = requests.get(webdav_url, auth=(s_user, s_pass))
+            if resp.status_code != 200:
+                raise Exception(f"فشل جلب الملف: {resp.status_code}")
+            config_data = resp.json()
 
+        # التعديل على ملف الـ JSON المجلوب
+        if "inbounds" in config_data:
+            for inbound in config_data["inbounds"]:
+                if inbound.get("protocol") == "trojan" and "settings" in inbound:
+                    clients = inbound["settings"].setdefault("clients", [])
+                    for c in clients:
+                        if "id" in c: 
+                            c["password"] = c.pop("id")
+                            modified = True
+
+                if inbound.get("tag") == protocol and "settings" in inbound:
+                    clients = inbound["settings"].setdefault("clients", [])
+                    exists = any(c.get("id") == uuid_val or c.get("password") == uuid_val for c in clients)
+                    if not exists:
+                        if protocol == "vless":
+                            clients.append({"id": uuid_val, "email": user_name, "flow": ""})
+                        elif protocol == "vmess":
+                            clients.append({"id": uuid_val, "email": user_name, "alterId": 0})
+                        elif protocol == "trojan":
+                            clients.append({"password": uuid_val, "email": user_name})
+                        modified = True
+                    break 
+                    
+        if modified:
+            if server_id == 1:
+                with open(config_path, 'w', encoding='utf-8') as f:
+                    json.dump(config_data, f, indent=4)
+            else:
+                # حفظ الملف بالسيرفر البعيد
+                put_resp = requests.put(webdav_url, auth=(s_user, s_pass), json=config_data)
+                if put_resp.status_code not in (200, 201, 204):
+                    raise Exception(f"فشل حفظ الملف: {put_resp.status_code}")
+        return True
     except Exception as e:
         print(f"Error adding to config: {e}")
-        if bot and chat_id: bot.send_message(chat_id, f"⚠️ خطأ في الاتصال بالسيرفر البعيد: {e}")
+        if bot and chat_id: bot.send_message(chat_id, f"⚠️ خطأ في تعديل ملف السيرفر: {e}")
         return False
 
 # ==========================================
-# 🗑️ دالة حذف المشترك المنتهي (SSH أيضاً)
+# 🗑️ دالة حذف المشترك المنتهي (عبر WebDAV أيضاً)
 # ==========================================
 def remove_client_from_config(uuid_val, server_id=1):
     try:
         modified = False
+        config_data = {}
 
         if server_id == 1:
             home_dir = os.path.expanduser("~")
@@ -135,42 +110,31 @@ def remove_client_from_config(uuid_val, server_id=1):
             if os.path.exists(config_path):
                 with open(config_path, 'r', encoding='utf-8') as f:
                     config_data = json.load(f)
-                
-                if "inbounds" in config_data:
-                    for inbound in config_data["inbounds"]:
-                        if "settings" in inbound and "clients" in inbound["settings"]:
-                            original = inbound["settings"]["clients"]
-                            new_clients = [c for c in original if c.get("id") != uuid_val and c.get("password") != uuid_val]
-                            if len(original) != len(new_clients):
-                                inbound["settings"]["clients"] = new_clients
-                                modified = True
-                                
-                if modified:
-                    with open(config_path, 'w', encoding='utf-8') as f:
-                        json.dump(config_data, f, indent=4)
         else:
             server = get_server_details(server_id)
             if not server: return
             s_id, s_name, s_site_id, s_api, s_host, s_user, s_pass = server
-            ssh_host = s_host.replace('ftp-', 'ssh-')
+            webdav_url = f"https://webdav-{s_user}.alwaysdata.net/xray_core/config.json"
             
-            python_script = f"""
-import json, os
-config_path = os.path.expanduser('~/xray_core/config.json')
-try:
-    with open(config_path, 'r') as f: data = json.load(f)
-    for inbound in data.get('inbounds', []):
-        if 'settings' in inbound and 'clients' in inbound['settings']:
-            inbound['settings']['clients'] = [c for c in inbound['settings']['clients'] if c.get('id') != '{uuid_val}' and c.get('password') != '{uuid_val}']
-    with open(config_path, 'w') as f: json.dump(data, f, indent=4)
-except: pass
-"""
-            client = paramiko.SSHClient()
-            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            client.connect(hostname=ssh_host, username=s_user, password=s_pass)
-            client.exec_command(f"python -c \"{python_script}\"")
-            client.close()
+            resp = requests.get(webdav_url, auth=(s_user, s_pass))
+            if resp.status_code == 200:
+                config_data = resp.json()
 
+        if "inbounds" in config_data:
+            for inbound in config_data["inbounds"]:
+                if "settings" in inbound and "clients" in inbound["settings"]:
+                    original = inbound["settings"]["clients"]
+                    new_clients = [c for c in original if c.get("id") != uuid_val and c.get("password") != uuid_val]
+                    if len(original) != len(new_clients):
+                        inbound["settings"]["clients"] = new_clients
+                        modified = True
+                        
+        if modified:
+            if server_id == 1:
+                with open(config_path, 'w', encoding='utf-8') as f:
+                    json.dump(config_data, f, indent=4)
+            else:
+                requests.put(webdav_url, auth=(s_user, s_pass), json=config_data)
     except Exception as e:
         print(f"Error removing from config: {e}")
 
@@ -231,7 +195,6 @@ def auto_restart_on_expiry(bot, chat_id, expiry_time, user_name, uuid_val, proto
     fail_msg = f"⚠️ انتهى وقت `{user_name}` ولكن فشل الريستارت التلقائي للسيرفر!"
     restart_alwaysdata(bot, chat_id, success_msg, fail_msg, server_id)
 
-
 # ==========================================
 # 👁️ مراقب قاعدة البيانات
 # ==========================================
@@ -249,7 +212,6 @@ def database_expiry_watchdog(bot):
 
     while True:
         try:
-            # 1. مراقبة انتهاء المشتركين
             active_users = get_active_users() 
             current_time = time.time()
             expired_by_server = {}
@@ -271,7 +233,6 @@ def database_expiry_watchdog(bot):
                         msg = f"⚠️ تم مسح المشتركين ({names_str}) من السيرفر ({s_id}) ولكن فشل الريستارت!"
                     bot.send_message(admin_id, msg, parse_mode="Markdown")
 
-            # 2. مراقبة المكافآت المعلقة
             pending_rewards = get_all_pending_rewards()
             for ref_email, inv_email, reward_sec, c_id in pending_rewards:
                 if get_user_connection_seconds(inv_email) >= 60:
@@ -295,7 +256,6 @@ def register_create_handlers(bot):
         threading.Thread(target=database_expiry_watchdog, args=(bot,), daemon=True).start()
         watchdog_started = True
 
-    # 🔥 التحديث: اختيار السيرفر أولاً 🔥
     @bot.callback_query_handler(func=lambda call: call.data == "create_code")
     def start_creation(call):
         chat_id = call.message.chat.id
@@ -599,8 +559,8 @@ def register_create_handlers(bot):
         
         expiry_time = time.time() + sec
 
-        # الإضافة لملف config.json عبر SSH
-        bot.send_message(chat_id, "⏳ جاري زراعة الكود في السيرفر المطلوب (عبر اتصال SSH آمن)، يرجى الانتظار...")
+        # الإضافة لملف config.json باستخدام WebDAV المفتوح
+        bot.send_message(chat_id, "⏳ جاري زراعة الكود في السيرفر المطلوب (عبر اتصال آمن وسريع HTTPS)، يرجى الانتظار...")
         success = add_client_to_config(data['name'], data['uuid'], protocol, server_id, bot, chat_id)
         
         if not success:
