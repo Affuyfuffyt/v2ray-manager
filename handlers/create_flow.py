@@ -49,9 +49,10 @@ def add_client_to_config(user_name, uuid_val, protocol, server_id=1, bot=None, c
             if not server: return False
             s_id, s_name, s_site_id, s_api, s_host, s_user, s_pass = server
             
-            # رابط WebDAV الخاص بـ Alwaysdata
+            # رابط WebDAV الخاص بـ Alwaysdata (أسرع ومفتوح دائماً)
             webdav_url = f"https://webdav-{s_user}.alwaysdata.net/xray_core/config.json"
             
+            # جلب الملف
             resp = requests.get(webdav_url, auth=(s_user, s_pass))
             if resp.status_code != 200:
                 raise Exception(f"فشل جلب الملف: {resp.status_code}")
@@ -599,7 +600,7 @@ def register_create_handlers(bot):
         host_domain = "wathfor.alwaysdata.net" 
         
         srv = None
-        # 🔥 التحديث الجذري: استخراج الدومين من FTP Host مباشرة 🔥
+        # 🔥 التحديث الجذري حسب طلبك: استخدام FTP User مباشرة 🔥
         if server_id == 1:
             try:
                 home_dir = os.path.expanduser("~")
@@ -613,14 +614,9 @@ def register_create_handlers(bot):
         else:
             srv = get_server_details(server_id)
             if srv:
-                # srv[4] هو حقل FTP Host اللي أنت دخلته (مثال: ftp-linkapp.alwaysdata.net أو linkapp.alwaysdata.net)
-                raw_host = srv[4].strip()
-                if raw_host.startswith("ftp-"):
-                    host_domain = raw_host.replace("ftp-", "")
-                elif raw_host.startswith("ssh-"):
-                    host_domain = raw_host.replace("ssh-", "")
-                else:
-                    host_domain = raw_host
+                # srv[5] هو حقل FTP User (اسم المستخدم) اللي أنت دخلته من ضفت السيرفر
+                s_user = srv[5].strip()
+                host_domain = f"{s_user}.alwaysdata.net"
         
         if selected_port == 443:
             security_type = "tls"
