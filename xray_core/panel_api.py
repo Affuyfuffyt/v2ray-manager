@@ -4,7 +4,7 @@ import requests
 from dotenv import load_dotenv
 import time
 
-CONFIG_PATH = '/home/wathfor/xray_core/config.json'
+CONFIG_PATH = '/home/linkapp/xray_core/config.json'
 
 class PanelAPI:
     def __init__(self):
