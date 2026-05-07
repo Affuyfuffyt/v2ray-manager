@@ -4,9 +4,11 @@ import requests
 from dotenv import load_dotenv
 import time
 
-# 🔥 اكتشاف المسار الأساسي تلقائياً 🔥
+# 🔥 اكتشاف المسار الأساسي وبناء مسار العقدة المعزولة تلقائياً 🔥
 HOME_DIR = os.path.expanduser("~")
-CONFIG_PATH = f'{HOME_DIR}/xray_core/config.json'
+LOCAL_USER = os.path.basename(HOME_DIR) # يستخرج اسم الحساب، مثلاً linkapp
+# توجيه البانيل للعمل على المجلد المعزول الخاص بهذا السيرفر
+CONFIG_PATH = f'{HOME_DIR}/node_{LOCAL_USER}/config.json'
 
 class PanelAPI:
     def __init__(self):
@@ -24,12 +26,11 @@ class PanelAPI:
             with open(CONFIG_PATH, 'r') as f:
                 config = json.load(f)
             
-            # 🔥 تصحيح مسار اللوكات التلقائي (بالاعتماد على المسار المطلق) 🔥
-            # يستخرج اسم اليوزر الحالي ويصحح المسار فوراً لضمان عمل Xray بالخلفية
-            local_user = os.path.basename(HOME_DIR)
+            # 🔥 تصحيح مسار اللوكات التلقائي (بالاعتماد على المجلد المعزول) 🔥
+            # حتى لو نسخت ملف كونفك من غير سيرفر، البوت راح يصححه لمجلد العقدة الحالية
             if "log" in config:
-                expected_access = f"/home/{local_user}/xray_core/access.log"
-                expected_error = f"/home/{local_user}/xray_core/error.log"
+                expected_access = f"{HOME_DIR}/node_{LOCAL_USER}/access.log"
+                expected_error = f"{HOME_DIR}/node_{LOCAL_USER}/error.log"
                 if config["log"].get("access") != expected_access:
                     config["log"]["access"] = expected_access
                 if config["log"].get("error") != expected_error:
