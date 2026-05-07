@@ -42,8 +42,9 @@ cd $WORK_DIR
 cp xray_core/config.json $XRAY_DIR/config.json
 
 echo "[+] جاري تصحيح مسارات السيرفر المحلي لتعمل مع حساب: $FTP_USER"
-sed -i "s/wathfor/$FTP_USER/g" $XRAY_DIR/config.json
-sed -i "s/wathfor/$FTP_USER/g" $WORK_DIR/xray_core/panel_api.py
+# 🔥 التحديث الجذري: مسح أي مسار قديم وكتابة المسار المطلق الصحيح بقوة 🔥
+sed -i 's|"access":.*|"access": "/home/'"$FTP_USER"'/xray_core/access.log",|g' $XRAY_DIR/config.json
+sed -i 's|"error":.*|"error": "/home/'"$FTP_USER"'/xray_core/error.log",|g' $XRAY_DIR/config.json
 
 # 7. تخزين كل المفاتيح في ملف البيئة المخفي
 echo "BOT_TOKEN=$BOT_TOKEN" > .env
