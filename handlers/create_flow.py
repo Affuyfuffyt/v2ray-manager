@@ -29,7 +29,7 @@ creation_data = {}
 watchdog_started = False
 
 # ==========================================
-# 🛠️ دالة الإضافة الذكية (عبر WebDAV المباشر والمفتوح)
+# 🛠️ دالة الإضافة الذكية (تصحيح المسارات تلقائياً + WebDAV)
 # ==========================================
 def add_client_to_config(user_name, uuid_val, protocol, server_id=1, bot=None, chat_id=None):
     try:
@@ -37,28 +37,49 @@ def add_client_to_config(user_name, uuid_val, protocol, server_id=1, bot=None, c
         config_data = {}
 
         if server_id == 1:
-            # 📌 إضافة للسيرفر المحلي (نفس السيرفر)
+            # 📌 إضافة للسيرفر المحلي
             home_dir = os.path.expanduser("~")
             config_path = f"{home_dir}/xray_core/config.json"
             if os.path.exists(config_path):
                 with open(config_path, 'r', encoding='utf-8') as f:
                     config_data = json.load(f)
+                    
+                # 🔥 تصحيح مسار اللوكات للسيرفر المحلي تلقائياً 🔥
+                local_user = os.path.basename(home_dir)
+                if "log" in config_data:
+                    expected_access = f"/home/{local_user}/xray_core/access.log"
+                    expected_error = f"/home/{local_user}/xray_core/error.log"
+                    if config_data["log"].get("access") != expected_access:
+                        config_data["log"]["access"] = expected_access
+                        modified = True
+                    if config_data["log"].get("error") != expected_error:
+                        config_data["log"]["error"] = expected_error
+                        modified = True
         else:
-            # 🌐 إضافة لسيرفر بعيد عبر WebDAV (HTTPS)
+            # 🌐 إضافة لسيرفر بعيد عبر WebDAV
             server = get_server_details(server_id)
             if not server: return False
             s_id, s_name, s_site_id, s_api, s_host, s_user, s_pass = server
             
-            # رابط WebDAV الخاص بـ Alwaysdata (أسرع ومفتوح دائماً)
             webdav_url = f"https://webdav-{s_user}.alwaysdata.net/xray_core/config.json"
             
-            # جلب الملف
             resp = requests.get(webdav_url, auth=(s_user, s_pass))
             if resp.status_code != 200:
                 raise Exception(f"فشل جلب الملف: {resp.status_code}")
             config_data = resp.json()
 
-        # التعديل على ملف الـ JSON المجلوب
+            # 🔥 التحديث الجذري: تصحيح مسار اللوكات ليوزر السيرفر الجديد تلقائياً 🔥
+            if "log" in config_data:
+                expected_access = f"/home/{s_user}/xray_core/access.log"
+                expected_error = f"/home/{s_user}/xray_core/error.log"
+                if config_data["log"].get("access") != expected_access:
+                    config_data["log"]["access"] = expected_access
+                    modified = True
+                if config_data["log"].get("error") != expected_error:
+                    config_data["log"]["error"] = expected_error
+                    modified = True
+
+        # التعديل على ملف الـ JSON وإضافة المشترك
         if "inbounds" in config_data:
             for inbound in config_data["inbounds"]:
                 if inbound.get("protocol") == "trojan" and "settings" in inbound:
@@ -86,7 +107,7 @@ def add_client_to_config(user_name, uuid_val, protocol, server_id=1, bot=None, c
                 with open(config_path, 'w', encoding='utf-8') as f:
                     json.dump(config_data, f, indent=4)
             else:
-                # 🔥 ضمان رفع الملف كـ بيانات خام لتفادي مشاكل WebDAV
+                # ضمان رفع الملف كـ بيانات خام لتفادي أخطاء WebDAV
                 headers = {'Content-Type': 'application/json'}
                 data_bytes = json.dumps(config_data, indent=4).encode('utf-8')
                 put_resp = requests.put(webdav_url, auth=(s_user, s_pass), data=data_bytes, headers=headers)
@@ -563,8 +584,8 @@ def register_create_handlers(bot):
         
         expiry_time = time.time() + sec
 
-        # الإضافة لملف config.json باستخدام WebDAV المفتوح
-        bot.send_message(chat_id, "⏳ جاري زراعة الكود في السيرفر المطلوب (عبر اتصال آمن وسريع HTTPS)، يرجى الانتظار...")
+        # الإضافة لملف config.json واستبدال المسارات
+        bot.send_message(chat_id, "⏳ جاري زراعة الكود وتصحيح مسارات السيرفر، يرجى الانتظار...")
         success = add_client_to_config(data['name'], data['uuid'], protocol, server_id, bot, chat_id)
         
         if not success:
@@ -600,7 +621,6 @@ def register_create_handlers(bot):
         host_domain = "wathfor.alwaysdata.net" 
         
         srv = None
-        # 🔥 التحديث الجذري حسب طلبك: استخدام FTP User مباشرة 🔥
         if server_id == 1:
             try:
                 home_dir = os.path.expanduser("~")
@@ -614,7 +634,6 @@ def register_create_handlers(bot):
         else:
             srv = get_server_details(server_id)
             if srv:
-                # srv[5] هو حقل FTP User (اسم المستخدم) اللي أنت دخلته من ضفت السيرفر
                 s_user = srv[5].strip()
                 host_domain = f"{s_user}.alwaysdata.net"
         
