@@ -1,7 +1,7 @@
 #!/bin/bash
 clear
 echo "=================================================="
-echo "  🚀 أداة إدارة V2Ray (النسخة الاحترافية بـ API) "
+echo "  🚀 بناء العقدة المعزولة (Isolated Node Architecture) "
 echo "=================================================="
 
 # 1. تنظيف وإيقاف العمليات
@@ -16,17 +16,18 @@ read -p "🆔 أدخل Site ID الخاص بك: " AD_SITE_ID
 read -p "🌐 أدخل الدومين الخاص بك (مثال: google.com): " AD_DOMAIN
 read -p "👤 أدخل FTP User (اسم حسابك في Alwaysdata): " FTP_USER
 
-# 3. تجهيز المجلدات
+# 3. تجهيز المجلدات (استخدام نظام العزل الجديد) 🔥
 WORK_DIR="$HOME/v2ray_manager"
-XRAY_DIR="$HOME/xray_core"
-mkdir -p $XRAY_DIR
+NODE_DIR="$HOME/node_$FTP_USER"
+
+mkdir -p $NODE_DIR
 rm -rf $WORK_DIR
 mkdir -p $WORK_DIR
 
-# 4. تحميل المحرك Xray (إذا لم يكن موجوداً)
-if [ ! -f "$XRAY_DIR/xray" ]; then
+# 4. تحميل المحرك Xray للعقدة المعزولة
+if [ ! -f "$NODE_DIR/xray" ]; then
     echo "[+] جاري تحميل محرك Xray..."
-    cd $XRAY_DIR
+    cd $NODE_DIR
     wget -q https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
     unzip -q Xray-linux-64.zip
     rm Xray-linux-64.zip
@@ -39,12 +40,12 @@ git clone https://github.com/Affuyfuffyt/v2ray-manager.git $WORK_DIR
 cd $WORK_DIR
 
 # 6. نقل ملف config.json للمكان الصحيح وتصحيح المسارات 🔥
-cp xray_core/config.json $XRAY_DIR/config.json
+cp xray_core/config.json $NODE_DIR/config.json
 
-echo "[+] جاري تصحيح مسارات السيرفر المحلي لتعمل مع حساب: $FTP_USER"
-# 🔥 التحديث الجذري: مسح أي مسار قديم وكتابة المسار المطلق الصحيح بقوة 🔥
-sed -i 's|"access":.*|"access": "/home/'"$FTP_USER"'/xray_core/access.log",|g' $XRAY_DIR/config.json
-sed -i 's|"error":.*|"error": "/home/'"$FTP_USER"'/xray_core/error.log",|g' $XRAY_DIR/config.json
+echo "[+] جاري تصحيح مسارات السيرفر المحلي لتعمل مع العقدة: node_$FTP_USER"
+# 🔥 التحديث الجذري: استبدال الكلمات الوهمية بمسارات العقدة المعزولة تلقائياً 🔥
+sed -i "s/placeholder_user/$FTP_USER/g" $NODE_DIR/config.json
+sed -i "s/node_placeholder/node_$FTP_USER/g" $NODE_DIR/config.json
 
 # 7. تخزين كل المفاتيح في ملف البيئة المخفي
 echo "BOT_TOKEN=$BOT_TOKEN" > .env
@@ -79,6 +80,6 @@ chmod +x $HOME/keep_alive.sh
 nohup python3 run.py > system.log 2>&1 &
 
 echo "=================================================="
-echo "✅ تم التثبيت والربط بـ API المنصة وتصحيح المسارات بنجاح!"
+echo "✅ تم التثبيت والبناء المعزول بنجاح! مجلدك هو: node_$FTP_USER"
 echo "⚠️ خطوة أخيرة مهمة: قم بإضافة $HOME/keep_alive.sh إلى Scheduled Tasks في لوحة Alwaysdata ليعمل كل 5 دقائق."
 echo "=================================================="
