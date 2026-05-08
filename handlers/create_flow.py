@@ -53,7 +53,8 @@ def add_client_to_config(user_name, uuid_val, protocol, server_id=1, bot=None, c
             if not server: return False
             s_id, s_name, s_site_id, s_api, s_host, s_user, s_pass = server
             
-            ftp = ftplib.FTP_TLS(f"ftp-{s_user}.alwaysdata.net")
+            # تم التعديل هنا: استخدام s_host اللي هو الهوست اللي تدخله يدوياً
+            ftp = ftplib.FTP_TLS(s_host)
             ftp.login(s_user, s_pass)
             ftp.prot_p() # تفعيل التشفير
             
@@ -116,7 +117,9 @@ def remove_client_from_config(uuid_val, server_id=1):
             server = get_server_details(server_id)
             if not server: return
             s_id, s_name, s_site_id, s_api, s_host, s_user, s_pass = server
-            ftp = ftplib.FTP_TLS(f"ftp-{s_user}.alwaysdata.net")
+            
+            # تم التعديل هنا: استخدام s_host
+            ftp = ftplib.FTP_TLS(s_host)
             ftp.login(s_user, s_pass)
             ftp.prot_p() # تفعيل التشفير
             r = BytesIO()
@@ -298,7 +301,7 @@ def register_create_handlers(bot):
 
     def process_add_id(message):
         add_server_data[message.chat.id]['id'] = message.text.strip()
-        msg = bot.send_message(message.chat.id, "7️⃣ أرسل **هوست السيرفر** (Domain)\n(مثال: `linkapp.alwaysdata.net`)", parse_mode="Markdown")
+        msg = bot.send_message(message.chat.id, "7️⃣ أرسل **هوست السيرفر** (Domain)\n(مثال: `linkapp.alwaysdata.net` أو `ftp-linkapp.alwaysdata.net`)", parse_mode="Markdown")
         bot.register_next_step_handler(msg, process_add_host)
 
     def process_add_host(message):
@@ -317,7 +320,12 @@ def register_create_handlers(bot):
         
         ftp_user = data['user']
         ftp_pass = data['pass']
+        ftp_host = data['host'] # تم التعديل هنا: استخدام الهوست المدخل يدوياً للاتصال
         
+        # إذا لم يكتب المستخدم ftp- قبل الدومين، نقوم بإضافته (لأن اتصال FTP في Alwaysdata يتطلب ذلك غالباً)
+        if not ftp_host.startswith("ftp-"):
+            ftp_host = f"ftp-{ftp_host}"
+
         # 1. بناء ملف Config.json خاص بهذا السيرفر
         node_config = {
           "log": {
@@ -474,7 +482,6 @@ class PanelAPI:
 
         # 3. رفع الملفات عبر FTP المشفر
         try:
-            ftp_host = f"ftp-{ftp_user}.alwaysdata.net"
             ftp = ftplib.FTP_TLS(ftp_host)
             ftp.login(ftp_user, ftp_pass)
             ftp.prot_p() # تفعيل التشفير
@@ -506,13 +513,13 @@ class PanelAPI:
                     c = conn.cursor()
                     c.execute('''INSERT INTO servers (name, site_id, api_key, host, user, password, status)
                                  VALUES (?, ?, ?, ?, ?, ?, 'active')''',
-                              (data['name'], data['id'], data['api'], data['host'], data['user'], data['pass']))
+                              (data['name'], data['id'], data['api'], ftp_host, data['user'], data['pass']))
                     conn.commit()
                     conn.close()
                 except Exception as db_e:
                     print("DB Error: ", db_e)
                     
-                bot.send_message(chat_id, f"✅ **تم إنشاء وإضافة السيرفر بنجاح!**\n\n🖥️ **اسم السيرفر:** `{data['name']}`\n🌐 **الهوست:** `{data['host']}`\n✅ **الملفات:** تم رفع `config.json` و `panel_api.py` بنجاح.\n🔄 **حالة التشغيل:** السيرفر يعمل بشكل ممتاز.\n\nيمكنك الآن استخدامه لإنشاء الأكواد من القائمة بحرية.", parse_mode="Markdown")
+                bot.send_message(chat_id, f"✅ **تم إنشاء وإضافة السيرفر بنجاح!**\n\n🖥️ **اسم السيرفر:** `{data['name']}`\n🌐 **الهوست:** `{ftp_host}`\n✅ **الملفات:** تم رفع `config.json` و `panel_api.py` بنجاح.\n🔄 **حالة التشغيل:** السيرفر يعمل بشكل ممتاز.\n\nيمكنك الآن استخدامه لإنشاء الأكواد من القائمة بحرية.", parse_mode="Markdown")
             else:
                 bot.send_message(chat_id, f"❌ تم رفع الملفات، ولكن فشل تشغيل السيرفر! تأكد من الـ Site ID والـ API. كود الخطأ: {resp.status_code}")
                 
@@ -876,7 +883,12 @@ class PanelAPI:
             except: pass
         else:
             srv = get_server_details(server_id)
-            if srv: host_domain = f"{srv[5]}.alwaysdata.net"
+            if srv:
+                # إذا كان الهوست يبدأ ب ftp-، نزيله ليظهر بشكل صحيح للمستخدم في الكود
+                raw_host = srv[5]
+                if raw_host.startswith("ftp-"):
+                    raw_host = raw_host[4:]
+                host_domain = raw_host
         
         if selected_port == 443:
             security_type = "tls"
