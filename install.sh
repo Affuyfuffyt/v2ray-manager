@@ -1,7 +1,7 @@
 #!/bin/bash
 clear
 echo "=================================================="
-echo "  🚀 بناء العقدة المعزولة (Isolated Node Architecture) "
+echo "  🚀 أداة إدارة V2Ray (النسخة الاحترافية بـ API) "
 echo "=================================================="
 
 # 1. تنظيف وإيقاف العمليات
@@ -16,18 +16,17 @@ read -p "🆔 أدخل Site ID الخاص بك: " AD_SITE_ID
 read -p "🌐 أدخل الدومين الخاص بك (مثال: google.com): " AD_DOMAIN
 read -p "👤 أدخل FTP User (اسم حسابك في Alwaysdata): " FTP_USER
 
-# 3. تجهيز المجلدات (استخدام نظام العزل الجديد) 🔥
+# 3. تجهيز المجلدات
 WORK_DIR="$HOME/v2ray_manager"
-NODE_DIR="$HOME/node_$FTP_USER"
-
-mkdir -p $NODE_DIR
+XRAY_DIR="$HOME/xray_core"
+mkdir -p $XRAY_DIR
 rm -rf $WORK_DIR
 mkdir -p $WORK_DIR
 
-# 4. تحميل المحرك Xray للعقدة المعزولة
-if [ ! -f "$NODE_DIR/xray" ]; then
+# 4. تحميل المحرك Xray 
+if [ ! -f "$XRAY_DIR/xray" ]; then
     echo "[+] جاري تحميل محرك Xray..."
-    cd $NODE_DIR
+    cd $XRAY_DIR
     wget -q https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
     unzip -q Xray-linux-64.zip
     rm Xray-linux-64.zip
@@ -39,13 +38,12 @@ echo "[+] جاري سحب ملفات البوت..."
 git clone https://github.com/Affuyfuffyt/v2ray-manager.git $WORK_DIR
 cd $WORK_DIR
 
-# 6. نقل ملف config.json للمكان الصحيح وتصحيح المسارات 🔥
-cp xray_core/config.json $NODE_DIR/config.json
+# 6. نقل ملف config.json وتصحيح المسارات 🔥
+cp xray_core/config.json $XRAY_DIR/config.json
 
-echo "[+] جاري تصحيح مسارات السيرفر المحلي لتعمل مع العقدة: node_$FTP_USER"
-# 🔥 التحديث الجذري: استبدال الكلمات الوهمية بمسارات العقدة المعزولة تلقائياً 🔥
-sed -i "s/placeholder_user/$FTP_USER/g" $NODE_DIR/config.json
-sed -i "s/node_placeholder/node_$FTP_USER/g" $NODE_DIR/config.json
+echo "[+] جاري استبدال مسارات wathfor بحساب: $FTP_USER"
+# 🔥 التحديث الجذري: البحث عن wathfor واستبدالها ليعمل المحرك بدون Crash 🔥
+sed -i "s/wathfor/$FTP_USER/g" $XRAY_DIR/config.json
 
 # 7. تخزين كل المفاتيح في ملف البيئة المخفي
 echo "BOT_TOKEN=$BOT_TOKEN" > .env
@@ -55,21 +53,20 @@ echo "AD_SITE_ID=$AD_SITE_ID" >> .env
 echo "AD_DOMAIN=$AD_DOMAIN" >> .env
 echo "FTP_USER=$FTP_USER" >> .env
 
-# 🔥 الإضافة الذكية: تجهيز ملف الريستارت التلقائي والدومين العالمي
+# 8. تجهيز ملف الريستارت التلقائي
 echo "$AD_SITE_ID" > $HOME/alwaysdata_keys.txt
 echo "$AD_API_KEY" >> $HOME/alwaysdata_keys.txt
 echo "$AD_DOMAIN" >> $HOME/alwaysdata_keys.txt
 
-# 8. تثبيت المكاتب
+# 9. تثبيت المكاتب
 echo "[+] جاري تثبيت المتطلبات..."
 pip install -r requirements.txt
 
-# 🔥 9. إنشاء ملف المراقب الأبدي (Keep Alive) 🔥
+# 10. إنشاء ملف المراقب الأبدي (Keep Alive)
 cat << 'EOF' > $HOME/keep_alive.sh
 #!/bin/bash
 if ! pgrep -f "run.py" > /dev/null
 then
-    echo "البوت كان متوقف... جاري إعادة تشغيله."
     cd $HOME/v2ray_manager
     nohup python3 run.py > system.log 2>&1 &
 fi
@@ -80,6 +77,6 @@ chmod +x $HOME/keep_alive.sh
 nohup python3 run.py > system.log 2>&1 &
 
 echo "=================================================="
-echo "✅ تم التثبيت والبناء المعزول بنجاح! مجلدك هو: node_$FTP_USER"
-echo "⚠️ خطوة أخيرة مهمة: قم بإضافة $HOME/keep_alive.sh إلى Scheduled Tasks في لوحة Alwaysdata ليعمل كل 5 دقائق."
+echo "✅ تم التثبيت والربط بـ API المنصة وتصحيح المسارات بنجاح!"
+echo "⚠️ خطوة أخيرة: لا تنسَ عمل Restart للـ Site من لوحة Alwaysdata ليعمل المحرك."
 echo "=================================================="
