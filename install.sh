@@ -41,9 +41,10 @@ cd $WORK_DIR
 # 6. نقل ملف config.json للمكان الصحيح وتصحيح المسارات 🔥
 cp xray_core/config.json $XRAY_DIR/config.json
 
-echo "[+] جاري استبدال مسارات wathfor بحساب: $FTP_USER"
-# 🔥 التحديث الجذري: البحث عن كلمة wathfor واستبدالها باليوزر الجديد 🔥
-sed -i "s/wathfor/$FTP_USER/g" $XRAY_DIR/config.json
+echo "[+] جاري تصحيح مسارات السيرفر المحلي لتعمل مع حساب: $FTP_USER"
+# 🔥 التحديث الجذري: مسح أي مسار قديم وكتابة المسار المطلق الصحيح بقوة 🔥
+sed -i 's|"access":.*|"access": "/home/'"$FTP_USER"'/xray_core/access.log",|g' $XRAY_DIR/config.json
+sed -i 's|"error":.*|"error": "/home/'"$FTP_USER"'/xray_core/error.log",|g' $XRAY_DIR/config.json
 
 # 7. تخزين كل المفاتيح في ملف البيئة المخفي
 echo "BOT_TOKEN=$BOT_TOKEN" > .env
@@ -62,7 +63,11 @@ echo "$AD_DOMAIN" >> $HOME/alwaysdata_keys.txt
 echo "[+] جاري تثبيت المتطلبات..."
 pip install -r requirements.txt
 
-# 🔥 10. إنشاء ملف المراقب الأبدي (Keep Alive) 🔥
+# 🔥 الإضافة الجديدة: تشغيل سكربت صيد الأوامر وتحديث القائمة 🔥
+echo "[+] جاري فحص السيرفرات السابقة وتعيين أمر جديد..."
+python3 assign_cmd.py
+
+# 10. إنشاء ملف المراقب الأبدي (Keep Alive) 
 cat << 'EOF' > $HOME/keep_alive.sh
 #!/bin/bash
 if ! pgrep -f "run.py" > /dev/null
