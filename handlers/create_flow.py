@@ -48,13 +48,14 @@ def add_client_to_config(user_name, uuid_val, protocol, server_id=1, bot=None, c
                 with open(config_path, 'r', encoding='utf-8') as f:
                     config_data = json.load(f)
         else:
-            # 🌐 إضافة لسيرفر بعيد عبر FTP
+            # 🌐 إضافة لسيرفر بعيد عبر FTP المشفر
             server = get_server_details(server_id)
             if not server: return False
             s_id, s_name, s_site_id, s_api, s_host, s_user, s_pass = server
             
-            ftp = ftplib.FTP(f"ftp-{s_user}.alwaysdata.net")
+            ftp = ftplib.FTP_TLS(f"ftp-{s_user}.alwaysdata.net")
             ftp.login(s_user, s_pass)
+            ftp.prot_p() # تفعيل التشفير
             
             r = BytesIO()
             ftp.retrbinary("RETR xray_core/config.json", r.write)
@@ -115,8 +116,9 @@ def remove_client_from_config(uuid_val, server_id=1):
             server = get_server_details(server_id)
             if not server: return
             s_id, s_name, s_site_id, s_api, s_host, s_user, s_pass = server
-            ftp = ftplib.FTP(f"ftp-{s_user}.alwaysdata.net")
+            ftp = ftplib.FTP_TLS(f"ftp-{s_user}.alwaysdata.net")
             ftp.login(s_user, s_pass)
+            ftp.prot_p() # تفعيل التشفير
             r = BytesIO()
             ftp.retrbinary("RETR xray_core/config.json", r.write)
             config_data = json.loads(r.getvalue().decode('utf-8'))
@@ -470,11 +472,12 @@ class PanelAPI:
             return False
 """
 
-        # 3. رفع الملفات عبر FTP
+        # 3. رفع الملفات عبر FTP المشفر
         try:
             ftp_host = f"ftp-{ftp_user}.alwaysdata.net"
-            ftp = ftplib.FTP(ftp_host)
+            ftp = ftplib.FTP_TLS(ftp_host)
             ftp.login(ftp_user, ftp_pass)
+            ftp.prot_p() # تفعيل التشفير
             
             # محاولة إنشاء مجلد xray_core
             try:
