@@ -9,8 +9,6 @@ import requests
 import threading
 import os
 import urllib.parse
-import ftplib
-from io import BytesIO
 
 # ًں‘‡ ط§ط³طھط¯ط¹ط§ط، ط¯ظˆط§ظ„ ط§ظ„ط­ظپط¸ ظˆظ‚ط§ط¹ط¯ط© ط§ظ„ط¨ظٹط§ظ†ط§طھ
 from database import save_user, extend_json_expiry
@@ -31,7 +29,7 @@ creation_data = {}
 watchdog_started = False
 
 # ==========================================
-# ًں› ï¸ڈ ط¯ط§ظ„ط© ط§ظ„ط¥ط¶ط§ظپط© ط§ظ„ط°ظƒظٹط© (طھط¯ط¹ظ… ط§ظ„ط³ظٹط±ظپط± ط§ظ„ظ…ط­ظ„ظٹ ظˆط§ظ„ط¨ط¹ظٹط¯)
+# ًں› ï¸ڈ ط¯ط§ظ„ط© ط§ظ„ط¥ط¶ط§ظپط© ط§ظ„ط°ظƒظٹط© (طھطµط­ظٹط­ ط§ظ„ظ…ط³ط§ط±ط§طھ ط§ظ„ظ†ط³ط¨ظٹ + WebDAV)
 # ==========================================
 def add_client_to_config(user_name, uuid_val, protocol, server_id=1, bot=None, chat_id=None):
     try:
@@ -39,26 +37,44 @@ def add_client_to_config(user_name, uuid_val, protocol, server_id=1, bot=None, c
         config_data = {}
 
         if server_id == 1:
-            # ًں“Œ ط¥ط¶ط§ظپط© ظ„ظ„ط³ظٹط±ظپط± ط§ظ„ظ…ط­ظ„ظٹ (ظ†ظپط³ ط§ظ„ط³ظٹط±ظپط±)
+            # ًں“Œ ط¥ط¶ط§ظپط© ظ„ظ„ط³ظٹط±ظپط± ط§ظ„ظ…ط­ظ„ظٹ
             home_dir = os.path.expanduser("~")
             config_path = f"{home_dir}/xray_core/config.json"
             if os.path.exists(config_path):
                 with open(config_path, 'r', encoding='utf-8') as f:
                     config_data = json.load(f)
+                    
+                # ًں”¥ طھطµط­ظٹط­ ط§ظ„ظ…ط³ط§ط± ط§ظ„ظ†ط³ط¨ظٹ ظ„ظ„ط³ظٹط±ظپط± ط§ظ„ظ…ط­ظ„ظٹ طھظ„ظ‚ط§ط¦ظٹط§ظ‹ ًں”¥
+                if "log" in config_data:
+                    if config_data["log"].get("access") != "./access.log":
+                        config_data["log"]["access"] = "./access.log"
+                        modified = True
+                    if config_data["log"].get("error") != "./error.log":
+                        config_data["log"]["error"] = "./error.log"
+                        modified = True
         else:
-            # ًںŒگ ط¥ط¶ط§ظپط© ظ„ط³ظٹط±ظپط± ط¨ط¹ظٹط¯ ط¹ط¨ط± FTP
+            # ًںŒگ ط¥ط¶ط§ظپط© ظ„ط³ظٹط±ظپط± ط¨ط¹ظٹط¯ ط¹ط¨ط± WebDAV
             server = get_server_details(server_id)
             if not server: return False
             s_id, s_name, s_site_id, s_api, s_host, s_user, s_pass = server
             
-            ftp = ftplib.FTP(s_host)
-            ftp.login(s_user, s_pass)
+            webdav_url = f"https://webdav-{s_user}.alwaysdata.net/xray_core/config.json"
             
-            r = BytesIO()
-            ftp.retrbinary("RETR xray_core/config.json", r.write)
-            config_data = json.loads(r.getvalue().decode('utf-8'))
+            resp = requests.get(webdav_url, auth=(s_user, s_pass))
+            if resp.status_code != 200:
+                raise Exception(f"ظپط´ظ„ ط¬ظ„ط¨ ط§ظ„ظ…ظ„ظپ: {resp.status_code}")
+            config_data = resp.json()
 
-        # ط§ظ„طھط¹ط¯ظٹظ„ ط¹ظ„ظ‰ ظ…ظ„ظپ ط§ظ„ظ€ JSON ط§ظ„ظ…ط¬ظ„ظˆط¨
+            # ًں”¥ ط§ظ„طھط­ط¯ظٹط« ط§ظ„ط¬ط°ط±ظٹ: طھطµط­ظٹط­ ط§ظ„ظ…ط³ط§ط± ط§ظ„ظ†ط³ط¨ظٹ ظ„ظ„ط³ظٹط±ظپط± ط§ظ„ظپط±ط¹ظٹ طھظ„ظ‚ط§ط¦ظٹط§ظ‹ ًں”¥
+            if "log" in config_data:
+                if config_data["log"].get("access") != "./access.log":
+                    config_data["log"]["access"] = "./access.log"
+                    modified = True
+                if config_data["log"].get("error") != "./error.log":
+                    config_data["log"]["error"] = "./error.log"
+                    modified = True
+
+        # ط§ظ„طھط¹ط¯ظٹظ„ ط¹ظ„ظ‰ ظ…ظ„ظپ ط§ظ„ظ€ JSON ظˆط¥ط¶ط§ظپط© ط§ظ„ظ…ط´طھط±ظƒ
         if "inbounds" in config_data:
             for inbound in config_data["inbounds"]:
                 if inbound.get("protocol") == "trojan" and "settings" in inbound:
@@ -86,9 +102,12 @@ def add_client_to_config(user_name, uuid_val, protocol, server_id=1, bot=None, c
                 with open(config_path, 'w', encoding='utf-8') as f:
                     json.dump(config_data, f, indent=4)
             else:
-                w = BytesIO(json.dumps(config_data, indent=4).encode('utf-8'))
-                ftp.storbinary("STOR xray_core/config.json", w)
-                ftp.quit()
+                # ط¶ظ…ط§ظ† ط±ظپط¹ ط§ظ„ظ…ظ„ظپ ظƒظ€ ط¨ظٹط§ظ†ط§طھ ط®ط§ظ… ظ„طھظپط§ط¯ظٹ ط£ط®ط·ط§ط، WebDAV
+                headers = {'Content-Type': 'application/json'}
+                data_bytes = json.dumps(config_data, indent=4).encode('utf-8')
+                put_resp = requests.put(webdav_url, auth=(s_user, s_pass), data=data_bytes, headers=headers)
+                if put_resp.status_code not in (200, 201, 204):
+                    raise Exception(f"ظپط´ظ„ ط­ظپط¸ ط§ظ„ظ…ظ„ظپ: {put_resp.status_code}")
         return True
     except Exception as e:
         print(f"Error adding to config: {e}")
@@ -96,7 +115,7 @@ def add_client_to_config(user_name, uuid_val, protocol, server_id=1, bot=None, c
         return False
 
 # ==========================================
-# ًں—‘ï¸ڈ ط¯ط§ظ„ط© ط­ط°ظپ ط§ظ„ظ…ط´طھط±ظƒ ط§ظ„ظ…ظ†طھظ‡ظٹ
+# ًں—‘ï¸ڈ ط¯ط§ظ„ط© ط­ط°ظپ ط§ظ„ظ…ط´طھط±ظƒ ط§ظ„ظ…ظ†طھظ‡ظٹ (ط¹ط¨ط± WebDAV ط£ظٹط¶ط§ظ‹)
 # ==========================================
 def remove_client_from_config(uuid_val, server_id=1):
     try:
@@ -113,11 +132,11 @@ def remove_client_from_config(uuid_val, server_id=1):
             server = get_server_details(server_id)
             if not server: return
             s_id, s_name, s_site_id, s_api, s_host, s_user, s_pass = server
-            ftp = ftplib.FTP(s_host)
-            ftp.login(s_user, s_pass)
-            r = BytesIO()
-            ftp.retrbinary("RETR xray_core/config.json", r.write)
-            config_data = json.loads(r.getvalue().decode('utf-8'))
+            webdav_url = f"https://webdav-{s_user}.alwaysdata.net/xray_core/config.json"
+            
+            resp = requests.get(webdav_url, auth=(s_user, s_pass))
+            if resp.status_code == 200:
+                config_data = resp.json()
 
         if "inbounds" in config_data:
             for inbound in config_data["inbounds"]:
@@ -133,9 +152,9 @@ def remove_client_from_config(uuid_val, server_id=1):
                 with open(config_path, 'w', encoding='utf-8') as f:
                     json.dump(config_data, f, indent=4)
             else:
-                w = BytesIO(json.dumps(config_data, indent=4).encode('utf-8'))
-                ftp.storbinary("STOR xray_core/config.json", w)
-                ftp.quit()
+                headers = {'Content-Type': 'application/json'}
+                data_bytes = json.dumps(config_data, indent=4).encode('utf-8')
+                requests.put(webdav_url, auth=(s_user, s_pass), data=data_bytes, headers=headers)
     except Exception as e:
         print(f"Error removing from config: {e}")
 
@@ -196,7 +215,6 @@ def auto_restart_on_expiry(bot, chat_id, expiry_time, user_name, uuid_val, proto
     fail_msg = f"âڑ ï¸ڈ ط§ظ†طھظ‡ظ‰ ظˆظ‚طھ `{user_name}` ظˆظ„ظƒظ† ظپط´ظ„ ط§ظ„ط±ظٹط³طھط§ط±طھ ط§ظ„طھظ„ظ‚ط§ط¦ظٹ ظ„ظ„ط³ظٹط±ظپط±!"
     restart_alwaysdata(bot, chat_id, success_msg, fail_msg, server_id)
 
-
 # ==========================================
 # ًں‘پï¸ڈ ظ…ط±ط§ظ‚ط¨ ظ‚ط§ط¹ط¯ط© ط§ظ„ط¨ظٹط§ظ†ط§طھ
 # ==========================================
@@ -214,7 +232,6 @@ def database_expiry_watchdog(bot):
 
     while True:
         try:
-            # 1. ظ…ط±ط§ظ‚ط¨ط© ط§ظ†طھظ‡ط§ط، ط§ظ„ظ…ط´طھط±ظƒظٹظ†
             active_users = get_active_users() 
             current_time = time.time()
             expired_by_server = {}
@@ -236,7 +253,6 @@ def database_expiry_watchdog(bot):
                         msg = f"âڑ ï¸ڈ طھظ… ظ…ط³ط­ ط§ظ„ظ…ط´طھط±ظƒظٹظ† ({names_str}) ظ…ظ† ط§ظ„ط³ظٹط±ظپط± ({s_id}) ظˆظ„ظƒظ† ظپط´ظ„ ط§ظ„ط±ظٹط³طھط§ط±طھ!"
                     bot.send_message(admin_id, msg, parse_mode="Markdown")
 
-            # 2. ظ…ط±ط§ظ‚ط¨ط© ط§ظ„ظ…ظƒط§ظپط¢طھ ط§ظ„ظ…ط¹ظ„ظ‚ط©
             pending_rewards = get_all_pending_rewards()
             for ref_email, inv_email, reward_sec, c_id in pending_rewards:
                 if get_user_connection_seconds(inv_email) >= 60:
@@ -260,7 +276,6 @@ def register_create_handlers(bot):
         threading.Thread(target=database_expiry_watchdog, args=(bot,), daemon=True).start()
         watchdog_started = True
 
-    # ًں”¥ ط§ظ„طھط­ط¯ظٹط«: ط§ط®طھظٹط§ط± ط§ظ„ط³ظٹط±ظپط± ط£ظˆظ„ط§ظ‹ ًں”¥
     @bot.callback_query_handler(func=lambda call: call.data == "create_code")
     def start_creation(call):
         chat_id = call.message.chat.id
@@ -564,12 +579,12 @@ def register_create_handlers(bot):
         
         expiry_time = time.time() + sec
 
-        # ط§ظ„ط¥ط¶ط§ظپط© ظ„ظ…ظ„ظپ config.json (ظ…ط­ظ„ظٹ ط£ظˆ ط¨ط¹ظٹط¯)
-        bot.send_message(chat_id, "âڈ³ ط¬ط§ط±ظٹ ط²ط±ط§ط¹ط© ط§ظ„ظƒظˆط¯ ظپظٹ ط§ظ„ط³ظٹط±ظپط± ط§ظ„ظ…ط·ظ„ظˆط¨طŒ ظٹط±ط¬ظ‰ ط§ظ„ط§ظ†طھط¸ط§ط±...")
+        # ط§ظ„ط¥ط¶ط§ظپط© ظ„ظ…ظ„ظپ config.json ظˆطھطµط­ظٹط­ ط§ظ„ظ…ط³ط§ط±ط§طھ
+        bot.send_message(chat_id, "âڈ³ ط¬ط§ط±ظٹ ط²ط±ط§ط¹ط© ط§ظ„ظƒظˆط¯ ظˆطھطµط­ظٹط­ ط§ظ„ظ…ط³ط§ط±ط§طھطŒ ظٹط±ط¬ظ‰ ط§ظ„ط§ظ†طھط¸ط§ط±...")
         success = add_client_to_config(data['name'], data['uuid'], protocol, server_id, bot, chat_id)
         
         if not success:
-            bot.send_message(chat_id, "â‌Œ ظپط´ظ„طھ ط¹ظ…ظ„ظٹط© ط§ظ„ط¥ط¶ط§ظپط© ظ„ظ„ط³ظٹط±ظپط± ط§ظ„ط¨ط¹ظٹط¯! طھط£ظƒط¯ ظ…ظ† ط¨ظٹط§ظ†ط§طھ FTP.")
+            bot.send_message(chat_id, "â‌Œ ظپط´ظ„طھ ط¹ظ…ظ„ظٹط© ط§ظ„ط¥ط¶ط§ظپط© ظ„ظ„ط³ظٹط±ظپط± ط§ظ„ط¨ط¹ظٹط¯! طھط£ظƒط¯ ظ…ظ† ط¨ظٹط§ظ†ط§طھظƒ.")
             creation_data.pop(chat_id, None)
             return
 
@@ -578,11 +593,9 @@ def register_create_handlers(bot):
 
         try:
             selected_port = data.get('port', 443)
-            # طھظ… ط¥ط¶ط§ظپط© server_id ظ„ظ„ظ€ DB
             add_user(data['name'], data['uuid'], selected_port, data['quota_bytes'], expiry_time, server_id)
         except Exception as e: print(f"Error saving to SQLite DB: {e}")
 
-        # ط§ظ„ظ…ظƒط§ظپط¢طھ
         new_ref_code = "REF-" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=5))
         try: assign_ref_code(data['name'], new_ref_code)
         except: pass
@@ -602,7 +615,7 @@ def register_create_handlers(bot):
         selected_port = data.get('port', 443)
         host_domain = "wathfor.alwaysdata.net" 
         
-        # ط§ط³طھط®ط±ط§ط¬ ط§ظ„ط¯ظˆظ…ظٹظ† ط¨ظ†ط§ط،ظ‹ ط¹ظ„ظ‰ ط§ظ„ط³ظٹط±ظپط±
+        srv = None
         if server_id == 1:
             try:
                 home_dir = os.path.expanduser("~")
@@ -615,7 +628,9 @@ def register_create_handlers(bot):
             except: pass
         else:
             srv = get_server_details(server_id)
-            if srv: host_domain = f"{srv[5]}.alwaysdata.net"
+            if srv:
+                s_user = srv[5].strip()
+                host_domain = f"{s_user}.alwaysdata.net"
         
         if selected_port == 443:
             security_type = "tls"
