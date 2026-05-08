@@ -13,6 +13,7 @@ import ftplib
 import sqlite3
 from io import BytesIO
 
+# 👇 استدعاء دوال الحفظ وقاعدة البيانات
 from database import save_user, extend_json_expiry
 from db import (
     add_user, get_active_users, set_user_expired, get_user_by_ref_code, 
@@ -21,15 +22,19 @@ from db import (
     get_all_servers, get_server_details
 )
 
+# 👇 استدعاء نظام الإشعارات
 try:
     from user_notifier import notify_extension
 except ImportError:
     def notify_extension(bot, email, seconds_added): pass
 
 creation_data = {}
-add_server_data = {} 
+add_server_data = {} # 📌 قاموس لحفظ بيانات السيرفر الجديد
 watchdog_started = False
 
+# ==========================================
+# 🛠️ دالة الإضافة الذكية (تدعم السيرفر المحلي والبعيد)
+# ==========================================
 def add_client_to_config(user_name, uuid_val, protocol, server_id=1, bot=None, chat_id=None):
     try:
         modified = False
@@ -181,7 +186,6 @@ def auto_restart_on_expiry(bot, chat_id, expiry_time, user_name, uuid_val, proto
     fail_msg = f"⚠️ انتهى وقت `{user_name}` ولكن فشل الريستارت التلقائي للسيرفر!"
     restart_alwaysdata(bot, chat_id, success_msg, fail_msg, server_id)
 
-
 def database_expiry_watchdog(bot):
     admin_id = None
     home_dir = os.path.expanduser("~")
@@ -262,7 +266,17 @@ def register_create_handlers(bot):
 
     def process_add_curl(message):
         add_server_data[message.chat.id]['curl_cmd'] = message.text.strip()
-        msg = bot.send_message(message.chat.id, "5️⃣ أرسل **الأمر المخصص** الذي سيشغل واجهة هذا السيرفر بالبوت\n(مثال: `/linkapp`):", parse_mode="Markdown")
+        msg = bot.send_message(message.chat.id, "5️⃣ أرسل **توكن البوت** (Bot Token):")
+        bot.register_next_step_handler(msg, process_add_bot_token)
+
+    def process_add_bot_token(message):
+        add_server_data[message.chat.id]['bot_token'] = message.text.strip()
+        msg = bot.send_message(message.chat.id, "6️⃣ أرسل **آيدي الأدمن** (Admin ID):")
+        bot.register_next_step_handler(msg, process_add_admin_id)
+
+    def process_add_admin_id(message):
+        add_server_data[message.chat.id]['admin_id'] = message.text.strip()
+        msg = bot.send_message(message.chat.id, "7️⃣ أرسل **الأمر المخصص** الذي سيشغل واجهة هذا السيرفر بالبوت\n(مثال: `/linkapp`):", parse_mode="Markdown")
         bot.register_next_step_handler(msg, process_add_custom_cmd)
 
     def process_add_custom_cmd(message):
@@ -270,36 +284,40 @@ def register_create_handlers(bot):
         if not cmd_text.startswith('/'):
             cmd_text = '/' + cmd_text
         add_server_data[message.chat.id]['custom_cmd'] = cmd_text
-        msg = bot.send_message(message.chat.id, "6️⃣ أرسل **اسم السيرفر** (الاسم الذي سيظهر في لوحة التحكم):")
+        msg = bot.send_message(message.chat.id, "8️⃣ أرسل **اسم السيرفر** (الاسم الذي سيظهر في لوحة التحكم):")
         bot.register_next_step_handler(msg, process_add_name)
 
     def process_add_name(message):
         add_server_data[message.chat.id]['name'] = message.text.strip()
-        msg = bot.send_message(message.chat.id, "7️⃣ أرسل **API Key** الخاص بالسيرفر:")
+        msg = bot.send_message(message.chat.id, "9️⃣ أرسل **API Key** الخاص بالسيرفر:")
         bot.register_next_step_handler(msg, process_add_api)
 
     def process_add_api(message):
         add_server_data[message.chat.id]['api'] = message.text.strip()
-        msg = bot.send_message(message.chat.id, "8️⃣ أرسل **ID السيرفر** (Site ID):")
+        msg = bot.send_message(message.chat.id, "🔟 أرسل **ID السيرفر** (Site ID):")
         bot.register_next_step_handler(msg, process_add_id)
 
     def process_add_id(message):
         add_server_data[message.chat.id]['id'] = message.text.strip()
-        msg = bot.send_message(message.chat.id, "9️⃣ أرسل **هوست السيرفر** (Domain)\n(مثال: `linkapp.alwaysdata.net`)", parse_mode="Markdown")
+        msg = bot.send_message(message.chat.id, "1️⃣1️⃣ أرسل **هوست السيرفر** (Domain)\n(مثال: `linkapp.alwaysdata.net`)", parse_mode="Markdown")
         bot.register_next_step_handler(msg, process_add_host)
 
     def process_add_host(message):
         add_server_data[message.chat.id]['host'] = message.text.strip()
-        msg = bot.send_message(message.chat.id, "🔟 أرسل **كود التشغيل** (Command Xray)\n(مثال: `/home/linkapp/xray_core/xray run -c /home/linkapp/xray_core/config.json /home/linkapp/xray_core/ userprogram`)", parse_mode="Markdown")
+        msg = bot.send_message(message.chat.id, "1️⃣2️⃣ أرسل **كود التشغيل** (Command Xray)\n(مثال: `/home/linkapp/xray_core/xray run -c /home/linkapp/xray_core/config.json /home/linkapp/xray_core/ userprogram`)", parse_mode="Markdown")
         bot.register_next_step_handler(msg, process_add_cmd)
 
     def process_add_cmd(message):
         add_server_data[message.chat.id]['run_cmd'] = message.text.strip()
-        finalize_add_server(message)
+        
+        # ✅ الحل: تشغيل الدالة الثقيلة بالخلفية حتى لا يعلق البوت
+        threading.Thread(target=finalize_add_server, args=(message,), daemon=True).start()
 
     def finalize_add_server(message):
         chat_id = message.chat.id
-        data = add_server_data[chat_id]
+        data = add_server_data.get(chat_id)
+        if not data: return
+        
         bot.send_message(chat_id, "⏳ جاري إرسال الإعدادات وتثبيت ملفات الكونفيك والبانيل المخصصة بالسيرفر الجديد...")
         
         ftp_user = data['user']
@@ -309,31 +327,40 @@ def register_create_handlers(bot):
         if not ftp_host.startswith("ftp-"):
             ftp_host = f"ftp-{ftp_host}"
 
-        # الدخول عبر SSH وتنفيذ أداة التثبيت تلقائياً (من 4 خطوات فقط)
+        # 1. الدخول عبر SSH وتنفيذ التثبيت (الآن مع PTY ووقت أقصى)
         try:
             import paramiko
             ssh_target = data['ssh'].replace('ssh ', '')
             ssh_user = ssh_target.split('@')[0]
             ssh_host_ip = ssh_target.split('@')[1]
             
-            bot.send_message(chat_id, "⚙️ جاري الدخول للسيرفر عبر SSH وتنفيذ أداة التثبيت تلقائياً...")
+            bot.send_message(chat_id, "⚙️ جاري الدخول للسيرفر عبر SSH وتنفيذ أداة التثبيت تلقائياً... (يرجى الانتظار دقيقة)")
             ssh_client = paramiko.SSHClient()
             ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             ssh_client.connect(ssh_host_ip, username=ssh_user, password=ftp_pass, timeout=15)
             
-            stdin, stdout, stderr = ssh_client.exec_command(data['curl_cmd'])
-            # هنا يتم حقن (API, Site ID, Domain, User) تلقائياً بالترتيب
-            input_data = f"{data['api']}\n{data['id']}\n{data['host']}\n{ftp_user}\n"
+            # ✅ get_pty=True ضرورية جداً حتى يستقبل السكربت الإجابات
+            stdin, stdout, stderr = ssh_client.exec_command(data['curl_cmd'], get_pty=True)
+            
+            time.sleep(2) # إعطاء فرصة للسكربت ليفتح
+            input_data = f"{data['bot_token']}\n{data['admin_id']}\n{data['api']}\n{data['id']}\n{data['host']}\n{ftp_user}\n"
             stdin.write(input_data)
             stdin.flush()
             
-            stdout.channel.recv_exit_status()
+            # ✅ تحديد وقت أقصى (60 ثانية) حتى لا يجمد البوت إذا تأخر السيرفر
+            stdout.channel.settimeout(60.0)
+            try:
+                stdout.channel.recv_exit_status()
+            except:
+                pass # إذا انتهى الوقت، اتركه يكمل بالخلفية وانتقل للي بعده
+                
             ssh_client.close()
         except ImportError:
             bot.send_message(chat_id, "⚠️ ملاحظة: مكتبة paramiko غير مثبتة، سيتم الاعتماد على FTP.")
         except Exception as e:
-            pass
+            pass # تم تجاهل عرض الخطأ للمستخدم حتى لا يتشوش، وسيتم الاعتماد على FTP
 
+        # 2. بناء ملف Config.json
         node_config = {
           "log": {
             "access": f"/home/{ftp_user}/xray_core/access.log",
@@ -391,6 +418,7 @@ def register_create_handlers(bot):
           }
         }
         
+        # 3. بناء ملف panel_api.py
         panel_script = f"""import json
 import os
 import time
@@ -465,6 +493,7 @@ class PanelAPI:
             return False
 """
 
+        # 4. رفع الملفات عبر FTP
         try:
             ftp = ftplib.FTP_TLS(ftp_host)
             ftp.login(ftp_user, ftp_pass)
@@ -480,6 +509,7 @@ class PanelAPI:
             ftp.storbinary("STOR xray_core/panel_api.py", panel_bytes)
             ftp.quit()
             
+            # 5. تشغيل السيرفر وحفظه
             url = f"https://api.alwaysdata.com/v1/site/{data['id']}/restart/"
             resp = requests.post(url, auth=(data['api'], ''))
             
