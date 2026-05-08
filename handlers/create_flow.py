@@ -41,28 +41,24 @@ def add_client_to_config(user_name, uuid_val, protocol, server_id=1, bot=None, c
         config_data = {}
 
         if server_id == 1:
-            # 📌 إضافة للسيرفر المحلي (نفس السيرفر)
             home_dir = os.path.expanduser("~")
             config_path = f"{home_dir}/xray_core/config.json"
             if os.path.exists(config_path):
                 with open(config_path, 'r', encoding='utf-8') as f:
                     config_data = json.load(f)
         else:
-            # 🌐 إضافة لسيرفر بعيد عبر FTP المشفر
             server = get_server_details(server_id)
             if not server: return False
             s_id, s_name, s_site_id, s_api, s_host, s_user, s_pass = server
             
-            # تم التعديل هنا: استخدام s_host اللي هو الهوست اللي تدخله يدوياً
             ftp = ftplib.FTP_TLS(s_host)
             ftp.login(s_user, s_pass)
-            ftp.prot_p() # تفعيل التشفير
+            ftp.prot_p() 
             
             r = BytesIO()
             ftp.retrbinary("RETR xray_core/config.json", r.write)
             config_data = json.loads(r.getvalue().decode('utf-8'))
 
-        # التعديل على ملف الـ JSON المجلوب
         if "inbounds" in config_data:
             for inbound in config_data["inbounds"]:
                 if inbound.get("protocol") == "trojan" and "settings" in inbound:
@@ -117,11 +113,9 @@ def remove_client_from_config(uuid_val, server_id=1):
             server = get_server_details(server_id)
             if not server: return
             s_id, s_name, s_site_id, s_api, s_host, s_user, s_pass = server
-            
-            # تم التعديل هنا: استخدام s_host
             ftp = ftplib.FTP_TLS(s_host)
             ftp.login(s_user, s_pass)
-            ftp.prot_p() # تفعيل التشفير
+            ftp.prot_p()
             r = BytesIO()
             ftp.retrbinary("RETR xray_core/config.json", r.write)
             config_data = json.loads(r.getvalue().decode('utf-8'))
@@ -256,9 +250,8 @@ def database_expiry_watchdog(bot):
             pass
         time.sleep(60)
 
-
 # ==========================================
-# 🆕 بناء وتوزيع الكود + 🌐 إضافة السيرفرات الذكية
+# 🆕 بناء وتوزيع الكود + 🌐 إضافة السيرفرات الذكية والعميقة
 # ==========================================
 def register_create_handlers(bot):
     global watchdog_started
@@ -267,7 +260,7 @@ def register_create_handlers(bot):
         watchdog_started = True
 
     # -----------------------------------------------------------------
-    # 🔥 ميزة إضافة سيرفر جديد مخصص بالكامل (بالتسلسل المطلوب) 🔥
+    # 🔥 ميزة إضافة سيرفر جديد مخصص بالكامل (بالتسلسل المطلوب 1 إلى 10) 🔥
     # -----------------------------------------------------------------
     @bot.message_handler(commands=['add_server'])
     def start_add_server(message):
@@ -286,47 +279,76 @@ def register_create_handlers(bot):
 
     def process_add_pass(message):
         add_server_data[message.chat.id]['pass'] = message.text.strip()
-        msg = bot.send_message(message.chat.id, "4️⃣ أرسل **اسم السيرفر** (الاسم الذي سيظهر في البوت):")
+        msg = bot.send_message(message.chat.id, "4️⃣ أرسل **كود تثبيت الأداة** في السيرفر الجديد\n(مثال: `curl -sO https://raw.githubusercontent.com/.../install.sh && bash install.sh`)", parse_mode="Markdown")
+        bot.register_next_step_handler(msg, process_add_curl)
+
+    def process_add_curl(message):
+        add_server_data[message.chat.id]['curl_cmd'] = message.text.strip()
+        msg = bot.send_message(message.chat.id, "5️⃣ أرسل **الأمر المخصص** الذي سيشغل واجهة هذا السيرفر بالبوت\n(مثال: `/linkapp`):", parse_mode="Markdown")
+        bot.register_next_step_handler(msg, process_add_custom_cmd)
+
+    def process_add_custom_cmd(message):
+        cmd_text = message.text.strip()
+        if not cmd_text.startswith('/'):
+            cmd_text = '/' + cmd_text
+        add_server_data[message.chat.id]['custom_cmd'] = cmd_text
+        msg = bot.send_message(message.chat.id, "6️⃣ أرسل **اسم السيرفر** (الاسم الذي سيظهر في لوحة التحكم):")
         bot.register_next_step_handler(msg, process_add_name)
 
     def process_add_name(message):
         add_server_data[message.chat.id]['name'] = message.text.strip()
-        msg = bot.send_message(message.chat.id, "5️⃣ أرسل **API Key** الخاص بالسيرفر:")
+        msg = bot.send_message(message.chat.id, "7️⃣ أرسل **API Key** الخاص بالسيرفر:")
         bot.register_next_step_handler(msg, process_add_api)
 
     def process_add_api(message):
         add_server_data[message.chat.id]['api'] = message.text.strip()
-        msg = bot.send_message(message.chat.id, "6️⃣ أرسل **ID السيرفر** (Site ID):")
+        msg = bot.send_message(message.chat.id, "8️⃣ أرسل **ID السيرفر** (Site ID):")
         bot.register_next_step_handler(msg, process_add_id)
 
     def process_add_id(message):
         add_server_data[message.chat.id]['id'] = message.text.strip()
-        msg = bot.send_message(message.chat.id, "7️⃣ أرسل **هوست السيرفر** (Domain)\n(مثال: `linkapp.alwaysdata.net` أو `ftp-linkapp.alwaysdata.net`)", parse_mode="Markdown")
+        msg = bot.send_message(message.chat.id, "9️⃣ أرسل **هوست السيرفر** (Domain)\n(مثال: `linkapp.alwaysdata.net`)", parse_mode="Markdown")
         bot.register_next_step_handler(msg, process_add_host)
 
     def process_add_host(message):
         add_server_data[message.chat.id]['host'] = message.text.strip()
-        msg = bot.send_message(message.chat.id, "8️⃣ أرسل **كود التشغيل** (Command)\n(مثال: `/home/linkapp/xray_core/xray run -c /home/linkapp/xray_core/config.json /home/linkapp/xray_core/ userprogram`)", parse_mode="Markdown")
+        msg = bot.send_message(message.chat.id, "🔟 أرسل **كود التشغيل** (Command Xray)\n(مثال: `/home/linkapp/xray_core/xray run -c /home/linkapp/xray_core/config.json /home/linkapp/xray_core/ userprogram`)", parse_mode="Markdown")
         bot.register_next_step_handler(msg, process_add_cmd)
 
     def process_add_cmd(message):
-        add_server_data[message.chat.id]['cmd'] = message.text.strip()
+        add_server_data[message.chat.id]['run_cmd'] = message.text.strip()
         finalize_add_server(message)
 
     def finalize_add_server(message):
         chat_id = message.chat.id
         data = add_server_data[chat_id]
-        bot.send_message(chat_id, "⏳ جاري إنشاء ملفات الكونفيك والبانيل المخصصة ورفعها للسيرفر الجديد، يرجى الانتظار...")
+        bot.send_message(chat_id, "⏳ جاري إرسال الإعدادات وتثبيت ملفات الكونفيك والبانيل المخصصة بالسيرفر الجديد...")
         
         ftp_user = data['user']
         ftp_pass = data['pass']
-        ftp_host = data['host'] # تم التعديل هنا: استخدام الهوست المدخل يدوياً للاتصال
+        ftp_host = data['host']
         
-        # إذا لم يكتب المستخدم ftp- قبل الدومين، نقوم بإضافته (لأن اتصال FTP في Alwaysdata يتطلب ذلك غالباً)
         if not ftp_host.startswith("ftp-"):
             ftp_host = f"ftp-{ftp_host}"
 
-        # 1. بناء ملف Config.json خاص بهذا السيرفر
+        # 1. محاولة تنفيذ كود SSH (إذا كانت مكتبة paramiko مثبتة)
+        try:
+            import paramiko
+            ssh_target = data['ssh'].replace('ssh ', '')
+            ssh_user = ssh_target.split('@')[0]
+            ssh_host_ip = ssh_target.split('@')[1]
+            
+            bot.send_message(chat_id, "⚙️ جاري محاولة الدخول للسيرفر عبر SSH وتنفيذ أداة التثبيت...")
+            ssh_client = paramiko.SSHClient()
+            ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            ssh_client.connect(ssh_host_ip, username=ssh_user, password=ftp_pass, timeout=10)
+            stdin, stdout, stderr = ssh_client.exec_command(data['curl_cmd'])
+            stdout.channel.recv_exit_status() # انتظار انتهاء التثبيت
+            ssh_client.close()
+        except Exception as e:
+            pass # نتجاهل الخطأ إذا لم يكن SSH متاحاً، لأن FTP سيقوم بالباقي.
+
+        # 2. بناء ملف Config.json الخاص بالسيرفر الجديد
         node_config = {
           "log": {
             "access": f"/home/{ftp_user}/xray_core/access.log",
@@ -384,41 +406,25 @@ def register_create_handlers(bot):
           }
         }
         
-        # 2. بناء ملف panel_api.py خاص بهذا السيرفر
+        # 3. بناء ملف panel_api.py خاص
         panel_script = f"""import json
 import os
-import requests
-from dotenv import load_dotenv
 import time
 
-HOME_DIR = os.path.expanduser("~")
 CONFIG_PATH = '/home/{ftp_user}/xray_core/config.json'
 
 class PanelAPI:
     def __init__(self):
-        load_dotenv()
-        self.api_key = os.getenv('AD_API_KEY')
-        self.site_id = os.getenv('AD_SITE_ID')
+        pass
 
     def create_client(self, email, uuid, protocol="vless"):
         try:
             if not os.path.exists(CONFIG_PATH):
                 return False
-
             with open(CONFIG_PATH, 'r') as f:
                 config = json.load(f)
             
-            local_user = os.path.basename(HOME_DIR)
-            if "log" in config:
-                expected_access = f"/home/{{local_user}}/xray_core/access.log"
-                expected_error = f"/home/{{local_user}}/xray_core/error.log"
-                if config["log"].get("access") != expected_access:
-                    config["log"]["access"] = expected_access
-                if config["log"].get("error") != expected_error:
-                    config["log"]["error"] = expected_error
-
             main_inbound = 0
-            
             if protocol == "vless" or protocol == "vmess":
                 new_client = {{"id": uuid, "email": email, "level": 0}}
             elif protocol == "trojan":
@@ -441,7 +447,6 @@ class PanelAPI:
                 json.dump(config, f, indent=2)
             
             return self.restart_xray()
-            
         except Exception as e:
             return False
 
@@ -449,9 +454,6 @@ class PanelAPI:
         os.system("pkill -9 xray")
         time.sleep(0.5)
         return True
-
-    def get_client_traffic(self, email):
-        return 0
 
     def change_client_status(self, email, inbound_id=None, uuid=None, enable=True):
         try:
@@ -474,40 +476,33 @@ class PanelAPI:
                 with open(CONFIG_PATH, 'w') as f:
                     json.dump(config, f, indent=2)
                 return self.restart_xray()
-                
             return True
         except Exception as e:
             return False
 """
 
-        # 3. رفع الملفات عبر FTP المشفر
+        # 4. رفع الملفات عبر FTP المشفر
         try:
             ftp = ftplib.FTP_TLS(ftp_host)
             ftp.login(ftp_user, ftp_pass)
-            ftp.prot_p() # تفعيل التشفير
+            ftp.prot_p()
             
-            # محاولة إنشاء مجلد xray_core
-            try:
-                ftp.mkd('xray_core')
-            except:
-                pass
+            try: ftp.mkd('xray_core')
+            except: pass
             
-            # رفع الكونفك
             config_bytes = BytesIO(json.dumps(node_config, indent=4).encode('utf-8'))
             ftp.storbinary("STOR xray_core/config.json", config_bytes)
             
-            # رفع البانيل
             panel_bytes = BytesIO(panel_script.encode('utf-8'))
             ftp.storbinary("STOR xray_core/panel_api.py", panel_bytes)
-            
             ftp.quit()
             
-            # 4. إعادة تشغيل السيرفر لفحص نجاح العملية
+            # 5. تشغيل السيرفر لفحص نجاح العملية
             url = f"https://api.alwaysdata.com/v1/site/{data['id']}/restart/"
             resp = requests.post(url, auth=(data['api'], ''))
             
-            if resp.status_code in [200, 201, 204]:
-                # حفظ السيرفر بقاعدة بيانات البوت مباشرة!
+            if resp.status_code in [200, 201, 202, 204]:
+                # 6. حفظ السيرفر بقاعدة البيانات وحفظ أمر الواجهة
                 try:
                     conn = sqlite3.connect('bot_database.db')
                     c = conn.cursor()
@@ -516,10 +511,22 @@ class PanelAPI:
                               (data['name'], data['id'], data['api'], ftp_host, data['user'], data['pass']))
                     conn.commit()
                     conn.close()
+                    
+                    # حفظ الأمر المخصص لتشغيل واجهة السيرفر (مثلاً /linkapp) بملف json مستقل للوصول السريع
+                    mapping_file = "server_commands.json"
+                    mapping = {}
+                    if os.path.exists(mapping_file):
+                        with open(mapping_file, 'r') as mf:
+                            mapping = json.load(mf)
+                    
+                    mapping[data['custom_cmd']] = data['name']
+                    with open(mapping_file, 'w') as mf:
+                        json.dump(mapping, mf, indent=4, ensure_ascii=False)
+                        
                 except Exception as db_e:
                     print("DB Error: ", db_e)
                     
-                bot.send_message(chat_id, f"✅ **تم إنشاء وإضافة السيرفر بنجاح!**\n\n🖥️ **اسم السيرفر:** `{data['name']}`\n🌐 **الهوست:** `{ftp_host}`\n✅ **الملفات:** تم رفع `config.json` و `panel_api.py` بنجاح.\n🔄 **حالة التشغيل:** السيرفر يعمل بشكل ممتاز.\n\nيمكنك الآن استخدامه لإنشاء الأكواد من القائمة بحرية.", parse_mode="Markdown")
+                bot.send_message(chat_id, f"✅ **تم إنشاء وإضافة السيرفر بنجاح!**\n\n🖥️ **اسم السيرفر:** `{data['name']}`\n🌐 **الهوست:** `{ftp_host}`\n✅ **الملفات:** تم الرفع بنجاح.\n🔑 **أمر التشغيل الخاص بهذا السيرفر:** `{data['custom_cmd']}`\n🔄 **حالة التشغيل:** السيرفر يعمل بشكل ممتاز.\n\nالآن يمكنك استخدام الأمر المخصص لفتح واجهة إدارة هذا السيرفر.", parse_mode="Markdown")
             else:
                 bot.send_message(chat_id, f"❌ تم رفع الملفات، ولكن فشل تشغيل السيرفر! تأكد من الـ Site ID والـ API. كود الخطأ: {resp.status_code}")
                 
@@ -832,7 +839,6 @@ class PanelAPI:
         
         expiry_time = time.time() + sec
 
-        # الإضافة لملف config.json (محلي أو بعيد)
         bot.send_message(chat_id, "⏳ جاري زراعة الكود في السيرفر المطلوب، يرجى الانتظار...")
         success = add_client_to_config(data['name'], data['uuid'], protocol, server_id, bot, chat_id)
         
@@ -846,11 +852,9 @@ class PanelAPI:
 
         try:
             selected_port = data.get('port', 443)
-            # تم إضافة server_id للـ DB
             add_user(data['name'], data['uuid'], selected_port, data['quota_bytes'], expiry_time, server_id)
         except Exception as e: print(f"Error saving to SQLite DB: {e}")
 
-        # المكافآت
         new_ref_code = "REF-" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=5))
         try: assign_ref_code(data['name'], new_ref_code)
         except: pass
@@ -870,7 +874,6 @@ class PanelAPI:
         selected_port = data.get('port', 443)
         host_domain = "wathfor.alwaysdata.net" 
         
-        # استخراج الدومين بناءً على السيرفر
         if server_id == 1:
             try:
                 home_dir = os.path.expanduser("~")
@@ -884,7 +887,6 @@ class PanelAPI:
         else:
             srv = get_server_details(server_id)
             if srv:
-                # إذا كان الهوست يبدأ ب ftp-، نزيله ليظهر بشكل صحيح للمستخدم في الكود
                 raw_host = srv[5]
                 if raw_host.startswith("ftp-"):
                     raw_host = raw_host[4:]
