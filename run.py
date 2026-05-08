@@ -24,6 +24,10 @@ except ImportError:
 bot = telebot.TeleBot(config.BOT_TOKEN)
 api = PanelAPI()
 
+# 🔥 استخراج الأمر الديناميكي المخصص لهذا السيرفر من ملف .env 🔥
+# إذا لم يكن موجوداً (في حالة السيرفر الأول)، سيكون 'start' بشكل افتراضي
+MY_CMD = os.getenv("MY_BOT_COMMAND", "start")
+
 # 🔥 التصليح الجذري للفلتر حتى ما يعلك الأزرار (مثل حالة الخادم) 🔥
 class IsAdmin(telebot.custom_filters.SimpleCustomFilter):
     key = 'is_admin'
@@ -59,7 +63,7 @@ def get_server_status_text():
             filled = int(percent / 10)
             return '█' * filled + '▒' * (10 - filled)
 
-        text = f"🖥️ | 𝗦𝗘𝗥𝗩𝗘𝗥 𝗥𝗘𝗦𝗢𝗨𝗥𝗖𝗘𝗦\n"
+        text = f"🖥️ | 𝗦𝗘𝗥𝗩𝗘𝗥 𝗥𝗘𝗦𝗢𝗨𝗥𝗖𝗘𝗦 ({MY_CMD})\n"
         text += f"━━━━━━━━━━━━━━━━━━\n"
         text += f"⚙️ **CPU:** `[{make_bar(cpu_usage)}]` {cpu_usage:.1f}%\n"
         text += f"🗄️ **RAM:** `[{make_bar(ram_percent)}]` {ram_percent}%\n"
@@ -94,13 +98,14 @@ radar_flow.register_radar_handlers(bot)
 user_handlers.register_user_handlers(bot) 
 servers_flow.register_servers_handlers(bot) # 🔥 تفعيل أزرار شبكة السيرفرات الجديدة 🔥
 
-# 🔥 فتح أمر البداية للكل مع صائد الأخطاء ومطابقة الـ ID 🔥
-@bot.message_handler(commands=['start'])
+# 🔥 المعمارية الجديدة: استقبال الأمر المخصص لهذا السيرفر حصراً 🔥
+@bot.message_handler(commands=[MY_CMD])
 def start_command(message):
     chat_id = message.chat.id
     try:
         # مقارنة دقيقة للتأكد من التعرف على الأدمن
         if str(chat_id) == str(config.ADMIN_ID):
+            bot.send_message(chat_id, f"✅ **متصل بالسيرفر المخصص للأمر:** `/{MY_CMD}`", parse_mode="Markdown")
             admin_start.show_main_menu(bot, chat_id)
         else:
             # توجيه المستخدم العادي
@@ -161,6 +166,7 @@ def handle_status_callbacks(call):
 # ==========================================
 if __name__ == "__main__":
     print(f"🚀 البوت يعمل الآن للأدمن ID: {config.ADMIN_ID}")
+    print(f"🔗 الأمر المخصص للتحكم بهذا السيرفر هو: /{MY_CMD}")
     
     threading.Thread(target=start_quota_monitor, daemon=True).start()
     threading.Thread(target=start_radar_monitor, daemon=True).start()
