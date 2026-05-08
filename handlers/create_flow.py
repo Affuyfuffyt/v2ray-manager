@@ -29,7 +29,7 @@ creation_data = {}
 watchdog_started = False
 
 # ==========================================
-# 🛠️ دالة الإضافة الذكية (العقد المعزولة + WebDAV)
+# 🛠️ دالة الإضافة الذكية (تصحيح المسارات + WebDAV)
 # ==========================================
 def add_client_to_config(user_name, uuid_val, protocol, server_id=1, bot=None, chat_id=None):
     try:
@@ -37,19 +37,20 @@ def add_client_to_config(user_name, uuid_val, protocol, server_id=1, bot=None, c
         config_data = {}
 
         if server_id == 1:
-            # 📌 إضافة للسيرفر المحلي (المجلد المعزول)
+            # 📌 إضافة للسيرفر المحلي
+            # البوت بالسيرفر المحلي راح يلكى الكونفك بمسار التيرمكس اللي تثبت بي
             home_dir = os.path.expanduser("~")
             local_user = os.path.basename(home_dir)
-            config_path = f"{home_dir}/node_{local_user}/config.json"
+            config_path = f"{home_dir}/xray_core/config.json"
             
             if os.path.exists(config_path):
                 with open(config_path, 'r', encoding='utf-8') as f:
                     config_data = json.load(f)
                     
-                # 🔥 تصحيح المسار المطلق للسيرفر المحلي تلقائياً 🔥
+                # 🔥 تصحيح المسار للسيرفر المحلي تلقائياً 🔥
                 if "log" in config_data:
-                    expected_access = f"{home_dir}/node_{local_user}/access.log"
-                    expected_error = f"{home_dir}/node_{local_user}/error.log"
+                    expected_access = f"/home/{local_user}/xray_core/access.log"
+                    expected_error = f"/home/{local_user}/xray_core/error.log"
                     if config_data["log"].get("access") != expected_access:
                         config_data["log"]["access"] = expected_access
                         modified = True
@@ -57,13 +58,12 @@ def add_client_to_config(user_name, uuid_val, protocol, server_id=1, bot=None, c
                         config_data["log"]["error"] = expected_error
                         modified = True
         else:
-            # 🌐 إضافة لسيرفر بعيد عبر WebDAV (المجلد المعزول)
+            # 🌐 إضافة لسيرفر بعيد عبر WebDAV
             server = get_server_details(server_id)
             if not server: return False
             s_id, s_name, s_site_id, s_api, s_host, s_user, s_pass = server
             
-            # توجيه الـ WebDAV للمجلد المعزول الجديد node_user
-            webdav_url = f"https://webdav-{s_user}.alwaysdata.net/node_{s_user}/config.json"
+            webdav_url = f"https://webdav-{s_user}.alwaysdata.net/xray_core/config.json"
             
             resp = requests.get(webdav_url, auth=(s_user, s_pass))
             if resp.status_code != 200:
@@ -72,8 +72,8 @@ def add_client_to_config(user_name, uuid_val, protocol, server_id=1, bot=None, c
 
             # 🔥 التحديث الجذري: تصحيح المسار المطلق للسيرفر الفرعي تلقائياً 🔥
             if "log" in config_data:
-                expected_access = f"/home/{s_user}/node_{s_user}/access.log"
-                expected_error = f"/home/{s_user}/node_{s_user}/error.log"
+                expected_access = f"/home/{s_user}/xray_core/access.log"
+                expected_error = f"/home/{s_user}/xray_core/error.log"
                 if config_data["log"].get("access") != expected_access:
                     config_data["log"]["access"] = expected_access
                     modified = True
@@ -122,7 +122,7 @@ def add_client_to_config(user_name, uuid_val, protocol, server_id=1, bot=None, c
         return False
 
 # ==========================================
-# 🗑️ دالة حذف المشترك المنتهي (عبر WebDAV والمجلد المعزول)
+# 🗑️ دالة حذف المشترك المنتهي (عبر WebDAV أيضاً)
 # ==========================================
 def remove_client_from_config(uuid_val, server_id=1):
     try:
@@ -131,8 +131,7 @@ def remove_client_from_config(uuid_val, server_id=1):
 
         if server_id == 1:
             home_dir = os.path.expanduser("~")
-            local_user = os.path.basename(home_dir)
-            config_path = f"{home_dir}/node_{local_user}/config.json"
+            config_path = f"{home_dir}/xray_core/config.json"
             if os.path.exists(config_path):
                 with open(config_path, 'r', encoding='utf-8') as f:
                     config_data = json.load(f)
@@ -140,7 +139,7 @@ def remove_client_from_config(uuid_val, server_id=1):
             server = get_server_details(server_id)
             if not server: return
             s_id, s_name, s_site_id, s_api, s_host, s_user, s_pass = server
-            webdav_url = f"https://webdav-{s_user}.alwaysdata.net/node_{s_user}/config.json"
+            webdav_url = f"https://webdav-{s_user}.alwaysdata.net/xray_core/config.json"
             
             resp = requests.get(webdav_url, auth=(s_user, s_pass))
             if resp.status_code == 200:
