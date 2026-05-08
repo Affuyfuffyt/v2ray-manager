@@ -1,7 +1,7 @@
 {
   "log": {
-    "access": "/home/wathfor/xray_core/access.log",
-    "error": "/home/wathfor/xray_core/error.log",
+    "access": "/home/placeholder/xray_core/access.log",
+    "error": "/home/placeholder/xray_core/error.log",
     "loglevel": "warning"
   },
   "stats": {},
