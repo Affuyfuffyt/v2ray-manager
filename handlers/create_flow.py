@@ -38,7 +38,6 @@ def add_client_to_config(user_name, uuid_val, protocol, server_id=1, bot=None, c
 
         if server_id == 1:
             # 📌 إضافة للسيرفر المحلي
-            # البوت بالسيرفر المحلي راح يلكى الكونفك بمسار التيرمكس اللي تثبت بي
             home_dir = os.path.expanduser("~")
             local_user = os.path.basename(home_dir)
             config_path = f"{home_dir}/xray_core/config.json"
@@ -70,7 +69,7 @@ def add_client_to_config(user_name, uuid_val, protocol, server_id=1, bot=None, c
                 raise Exception(f"فشل جلب الملف: {resp.status_code}")
             config_data = resp.json()
 
-            # 🔥 التحديث الجذري: تصحيح المسار المطلق للسيرفر الفرعي تلقائياً 🔥
+            # 🔥 تصحيح المسار المطلق للسيرفر الفرعي تلقائياً 🔥
             if "log" in config_data:
                 expected_access = f"/home/{s_user}/xray_core/access.log"
                 expected_error = f"/home/{s_user}/xray_core/error.log"
@@ -275,7 +274,7 @@ def database_expiry_watchdog(bot):
         time.sleep(60)
 
 # ==========================================
-# 🆕 بناء وتوزيع الكود
+# 🆕 بناء وتوزيع الكود + ميزة تنصيب العقد (Nodes)
 # ==========================================
 def register_create_handlers(bot):
     global watchdog_started
@@ -283,6 +282,114 @@ def register_create_handlers(bot):
         threading.Thread(target=database_expiry_watchdog, args=(bot,), daemon=True).start()
         watchdog_started = True
 
+    # ----------------------------------------------------
+    # 🔥 ميزة إضافة وتجهيز سيرفر فرعي تلقائياً عبر التوكن 🔥
+    # ----------------------------------------------------
+    @bot.message_handler(commands=['add_node'])
+    def setup_new_node(message):
+        msg = bot.send_message(message.chat.id, "🌐 **تجهيز سيرفر فرعي جديد:**\nأرسل (توكن السيرفر) الذي يحتوي على مسار التشغيل.\n\nمثال:\n`/home/linkapp/xray_core/xray run -c /home/linkapp/xray_core/config.json /home/linkapp/xray_core/ userprogram`", parse_mode="Markdown")
+        bot.register_next_step_handler(msg, process_node_token)
+
+    def process_node_token(message):
+        token = message.text.strip()
+        try:
+            # استخراج اليوزر من التوكن (مثلاً linkapp من /home/linkapp/...)
+            ftp_user = token.split('/')[2]
+        except Exception:
+            bot.send_message(message.chat.id, "❌ التوكن غير صحيح، تأكد من نسخه بالكامل.")
+            return
+
+        creation_data[message.chat.id] = {'new_node_user': ftp_user}
+        msg = bot.send_message(message.chat.id, f"✅ تم استخراج اسم الحساب: `{ftp_user}`\n\n🔑 أرسل الآن **باسورد حساب Alwaysdata** ليتم بناء وتصدير ملف `config.json` للسيرفر الجديد تلقائياً:", parse_mode="Markdown")
+        bot.register_next_step_handler(msg, process_node_password)
+
+    def process_node_password(message):
+        ftp_pass = message.text.strip()
+        chat_id = message.chat.id
+        ftp_user = creation_data[chat_id].get('new_node_user')
+        
+        bot.send_message(chat_id, "⏳ جاري توليد ملف الكونفك ورفعه للسيرفر الفرعي عبر WebDAV...")
+        
+        # توليد قالب الكونفك المخصص لهذا السيرفر
+        node_config = {
+          "log": {
+            "access": f"/home/{ftp_user}/xray_core/access.log",
+            "error": f"/home/{ftp_user}/xray_core/error.log",
+            "loglevel": "warning"
+          },
+          "stats": {},
+          "api": {
+            "tag": "api",
+            "services": ["StatsService", "HandlerService", "LoggerService", "ReflectionService"]
+          },
+          "policy": {
+            "levels": {"0": {"statsUserUplink": True, "statsUserDownlink": True}},
+            "system": {"statsInboundUplink": True, "statsInboundDownlink": True, "statsOutboundUplink": True, "statsOutboundDownlink": True}
+          },
+          "inbounds": [
+            {
+              "tag": "vless_tcp_fallback", "port": 8100, "listen": "0.0.0.0", "protocol": "vless",
+              "settings": {
+                "clients": [], "decryption": "none",
+                "fallbacks": [
+                  {"path": "/Telegram-@338888-vless", "dest": 8101},
+                  {"path": "/Telegram-@338888-vmess", "dest": 8102},
+                  {"path": "/Telegram-@338888-trojan", "dest": 8103}
+                ]
+              },
+              "streamSettings": {"network": "tcp"}
+            },
+            {
+              "tag": "vless", "port": 8101, "listen": "127.0.0.1", "protocol": "vless",
+              "settings": {"clients": [], "decryption": "none"},
+              "streamSettings": {"network": "ws", "wsSettings": {"path": "/Telegram-@338888-vless"}}
+            },
+            {
+              "tag": "vmess", "port": 8102, "listen": "127.0.0.1", "protocol": "vmess",
+              "settings": {"clients": []},
+              "streamSettings": {"network": "ws", "wsSettings": {"path": "/Telegram-@338888-vmess"}}
+            },
+            {
+              "tag": "trojan", "port": 8103, "listen": "127.0.0.1", "protocol": "trojan",
+              "settings": {"clients": []},
+              "streamSettings": {"network": "ws", "wsSettings": {"path": "/Telegram-@338888-trojan"}}
+            },
+            {
+              "port": 10086, "listen": "127.0.0.1", "protocol": "dokodemo-door",
+              "settings": {"address": "127.0.0.1"}, "tag": "api"
+            }
+          ],
+          "outbounds": [
+            {"protocol": "freedom", "tag": "freedom"},
+            {"protocol": "blackhole", "tag": "api"}
+          ],
+          "routing": {
+            "rules": [{"inboundTag": ["api"], "outboundTag": "api", "type": "field"}]
+          }
+        }
+
+        dir_url = f"https://webdav-{ftp_user}.alwaysdata.net/xray_core/"
+        webdav_url = f"https://webdav-{ftp_user}.alwaysdata.net/xray_core/config.json"
+
+        try:
+            # محاولة إنشاء المجلد إذا لم يكن موجوداً
+            requests.request('MKCOL', dir_url, auth=(ftp_user, ftp_pass))
+            
+            # رفع الكونفك
+            headers = {'Content-Type': 'application/json'}
+            data_bytes = json.dumps(node_config, indent=4).encode('utf-8')
+            resp = requests.put(webdav_url, auth=(ftp_user, ftp_pass), data=data_bytes, headers=headers)
+
+            if resp.status_code in [200, 201, 204]:
+                bot.send_message(chat_id, f"✅ **تم تجهيز السيرفر الفرعي بنجاح!**\n\nتم رفع ملف `config.json` بمسارات اليوزر `{ftp_user}`.\n⚠️ **تذكر:** السيرفرات الفرعية لا تحتاج ملف `panel_api.py` لأن البوت المركزي يديرها عن بعد.\n\nيمكنك الآن إضافته كـ (سيرفر جديد) لقاعدة بيانات البوت من لوحة التحكم.", parse_mode="Markdown")
+            else:
+                bot.send_message(chat_id, f"❌ فشل رفع الملف. كود الخطأ: {resp.status_code}\nتأكد من الباسورد وأن مساحة الحساب ليست ممتلئة.")
+        except Exception as e:
+            bot.send_message(chat_id, f"❌ حدث خطأ أثناء الاتصال: {e}")
+
+    # ----------------------------------------------------
+    # دوال صناعة الأكواد للمشتركين
+    # ----------------------------------------------------
     @bot.callback_query_handler(func=lambda call: call.data == "create_code")
     def start_creation(call):
         chat_id = call.message.chat.id
