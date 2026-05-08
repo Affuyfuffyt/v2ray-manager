@@ -4,13 +4,12 @@ import requests
 from dotenv import load_dotenv
 import time
 
-# 🔥 اكتشاف المسار الأساسي تلقائياً 🔥
+# 🔥 اكتشاف المسار الأساسي واسم السيرفر تلقائياً 🔥
 HOME_DIR = os.path.expanduser("~")
 CONFIG_PATH = f'{HOME_DIR}/xray_core/config.json'
 
 class PanelAPI:
     def __init__(self):
-        # تحميل المفاتيح للاتصال المستقبلي إذا لزم الأمر
         load_dotenv()
         self.api_key = os.getenv('AD_API_KEY')
         self.site_id = os.getenv('AD_SITE_ID')
@@ -24,8 +23,7 @@ class PanelAPI:
             with open(CONFIG_PATH, 'r') as f:
                 config = json.load(f)
             
-            # 🔥 تصحيح مسار اللوكات التلقائي (بالاعتماد على المسار المطلق) 🔥
-            # يستخرج اسم اليوزر الحالي ويصحح المسار فوراً لضمان عمل Xray بالخلفية
+            # 🔥 تصحيح مسار اللوكات التلقائي (بالاعتماد على اليوزر الحالي) 🔥
             local_user = os.path.basename(HOME_DIR)
             if "log" in config:
                 expected_access = f"/home/{local_user}/xray_core/access.log"
@@ -35,7 +33,7 @@ class PanelAPI:
                 if config["log"].get("error") != expected_error:
                     config["log"]["error"] = expected_error
 
-            # 🔥 إضافة المشترك للمنفذ الرئيسي (Fallback) ليتم حساب استهلاكه 🔥
+            # 🔥 إضافة المشترك للمنفذ الرئيسي (Fallback) 🔥
             main_inbound = 0
             
             if protocol == "vless" or protocol == "vmess":
@@ -45,12 +43,10 @@ class PanelAPI:
             else:
                 new_client = {"id": uuid, "email": email, "level": 0}
 
-            # الإضافة للبوابة الرئيسية
             clients_main = config['inbounds'][main_inbound]['settings']['clients']
             if not any(c.get('email') == email for c in clients_main):
                 clients_main.append(new_client)
 
-            # الإضافة للمسار الخاص بالبروتوكول (WS)
             target_map = {"vless": 1, "vmess": 2, "trojan": 3}
             target_inbound = target_map.get(protocol.lower(), 1)
             
@@ -58,7 +54,6 @@ class PanelAPI:
             if not any(c.get('email') == email for c in clients_ws):
                 clients_ws.append(new_client)
             
-            # حفظ الملف بعد التعديل والتصحيح
             with open(CONFIG_PATH, 'w') as f:
                 json.dump(config, f, indent=2)
             
@@ -69,7 +64,6 @@ class PanelAPI:
             return False
 
     def restart_xray(self):
-        # 1. إيقاف المحرك لقطع الاتصال عن المنتهين وإجبار السيرفر على إعادة التشغيل
         os.system("pkill -9 xray")
         time.sleep(0.5)
         return True
@@ -83,7 +77,6 @@ class PanelAPI:
                 config = json.load(f)
             
             changed = False
-            # البحث وحذف المشترك من جميع البوابات (من 0 إلى 3)
             for i in range(4): 
                 try:
                     clients = config['inbounds'][i]['settings']['clients']
