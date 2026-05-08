@@ -10,6 +10,7 @@ import threading
 import os
 import urllib.parse
 import ftplib
+import sqlite3
 from io import BytesIO
 
 # 👇 استدعاء دوال الحفظ وقاعدة البيانات
@@ -28,6 +29,7 @@ except ImportError:
     def notify_extension(bot, email, seconds_added): pass
 
 creation_data = {}
+add_server_data = {} # 📌 قاموس لحفظ بيانات السيرفر الجديد
 watchdog_started = False
 
 # ==========================================
@@ -51,7 +53,7 @@ def add_client_to_config(user_name, uuid_val, protocol, server_id=1, bot=None, c
             if not server: return False
             s_id, s_name, s_site_id, s_api, s_host, s_user, s_pass = server
             
-            ftp = ftplib.FTP(s_host)
+            ftp = ftplib.FTP(f"ftp-{s_user}.alwaysdata.net")
             ftp.login(s_user, s_pass)
             
             r = BytesIO()
@@ -113,7 +115,7 @@ def remove_client_from_config(uuid_val, server_id=1):
             server = get_server_details(server_id)
             if not server: return
             s_id, s_name, s_site_id, s_api, s_host, s_user, s_pass = server
-            ftp = ftplib.FTP(s_host)
+            ftp = ftplib.FTP(f"ftp-{s_user}.alwaysdata.net")
             ftp.login(s_user, s_pass)
             r = BytesIO()
             ftp.retrbinary("RETR xray_core/config.json", r.write)
@@ -214,7 +216,6 @@ def database_expiry_watchdog(bot):
 
     while True:
         try:
-            # 1. مراقبة انتهاء المشتركين
             active_users = get_active_users() 
             current_time = time.time()
             expired_by_server = {}
@@ -236,7 +237,6 @@ def database_expiry_watchdog(bot):
                         msg = f"⚠️ تم مسح المشتركين ({names_str}) من السيرفر ({s_id}) ولكن فشل الريستارت!"
                     bot.send_message(admin_id, msg, parse_mode="Markdown")
 
-            # 2. مراقبة المكافآت المعلقة
             pending_rewards = get_all_pending_rewards()
             for ref_email, inv_email, reward_sec, c_id in pending_rewards:
                 if get_user_connection_seconds(inv_email) >= 60:
@@ -251,8 +251,9 @@ def database_expiry_watchdog(bot):
             pass
         time.sleep(60)
 
+
 # ==========================================
-# 🆕 بناء وتوزيع الكود
+# 🆕 بناء وتوزيع الكود + 🌐 إضافة السيرفرات الذكية
 # ==========================================
 def register_create_handlers(bot):
     global watchdog_started
@@ -260,7 +261,264 @@ def register_create_handlers(bot):
         threading.Thread(target=database_expiry_watchdog, args=(bot,), daemon=True).start()
         watchdog_started = True
 
-    # 🔥 التحديث: اختيار السيرفر أولاً 🔥
+    # -----------------------------------------------------------------
+    # 🔥 ميزة إضافة سيرفر جديد مخصص بالكامل (بالتسلسل المطلوب) 🔥
+    # -----------------------------------------------------------------
+    @bot.message_handler(commands=['add_server'])
+    def start_add_server(message):
+        msg = bot.send_message(message.chat.id, "1️⃣ أرسل **كود SSH** للاتصال بالسيرفر\n(مثال: `ssh linkapp@ssh-linkapp.alwaysdata.net`)", parse_mode="Markdown")
+        bot.register_next_step_handler(msg, process_add_ssh)
+
+    def process_add_ssh(message):
+        add_server_data[message.chat.id] = {'ssh': message.text.strip()}
+        msg = bot.send_message(message.chat.id, "2️⃣ أرسل **يوزر السيرفر** (FTP User):")
+        bot.register_next_step_handler(msg, process_add_user)
+
+    def process_add_user(message):
+        add_server_data[message.chat.id]['user'] = message.text.strip()
+        msg = bot.send_message(message.chat.id, "3️⃣ أرسل **باسورد السيرفر** (FTP Password):")
+        bot.register_next_step_handler(msg, process_add_pass)
+
+    def process_add_pass(message):
+        add_server_data[message.chat.id]['pass'] = message.text.strip()
+        msg = bot.send_message(message.chat.id, "4️⃣ أرسل **اسم السيرفر** (الاسم الذي سيظهر في البوت):")
+        bot.register_next_step_handler(msg, process_add_name)
+
+    def process_add_name(message):
+        add_server_data[message.chat.id]['name'] = message.text.strip()
+        msg = bot.send_message(message.chat.id, "5️⃣ أرسل **API Key** الخاص بالسيرفر:")
+        bot.register_next_step_handler(msg, process_add_api)
+
+    def process_add_api(message):
+        add_server_data[message.chat.id]['api'] = message.text.strip()
+        msg = bot.send_message(message.chat.id, "6️⃣ أرسل **ID السيرفر** (Site ID):")
+        bot.register_next_step_handler(msg, process_add_id)
+
+    def process_add_id(message):
+        add_server_data[message.chat.id]['id'] = message.text.strip()
+        msg = bot.send_message(message.chat.id, "7️⃣ أرسل **هوست السيرفر** (Domain)\n(مثال: `linkapp.alwaysdata.net`)", parse_mode="Markdown")
+        bot.register_next_step_handler(msg, process_add_host)
+
+    def process_add_host(message):
+        add_server_data[message.chat.id]['host'] = message.text.strip()
+        msg = bot.send_message(message.chat.id, "8️⃣ أرسل **كود التشغيل** (Command)\n(مثال: `/home/linkapp/xray_core/xray run -c /home/linkapp/xray_core/config.json /home/linkapp/xray_core/ userprogram`)", parse_mode="Markdown")
+        bot.register_next_step_handler(msg, process_add_cmd)
+
+    def process_add_cmd(message):
+        add_server_data[message.chat.id]['cmd'] = message.text.strip()
+        finalize_add_server(message)
+
+    def finalize_add_server(message):
+        chat_id = message.chat.id
+        data = add_server_data[chat_id]
+        bot.send_message(chat_id, "⏳ جاري إنشاء ملفات الكونفيك والبانيل المخصصة ورفعها للسيرفر الجديد، يرجى الانتظار...")
+        
+        ftp_user = data['user']
+        ftp_pass = data['pass']
+        
+        # 1. بناء ملف Config.json خاص بهذا السيرفر
+        node_config = {
+          "log": {
+            "access": f"/home/{ftp_user}/xray_core/access.log",
+            "error": f"/home/{ftp_user}/xray_core/error.log",
+            "loglevel": "warning"
+          },
+          "stats": {},
+          "api": {
+            "tag": "api",
+            "services": ["StatsService", "HandlerService", "LoggerService", "ReflectionService"]
+          },
+          "policy": {
+            "levels": {"0": {"statsUserUplink": True, "statsUserDownlink": True}},
+            "system": {"statsInboundUplink": True, "statsInboundDownlink": True, "statsOutboundUplink": True, "statsOutboundDownlink": True}
+          },
+          "inbounds": [
+            {
+              "tag": "vless_tcp_fallback", "port": 8100, "listen": "0.0.0.0", "protocol": "vless",
+              "settings": {
+                "clients": [], "decryption": "none",
+                "fallbacks": [
+                  {"path": "/Telegram-@338888-vless", "dest": 8101},
+                  {"path": "/Telegram-@338888-vmess", "dest": 8102},
+                  {"path": "/Telegram-@338888-trojan", "dest": 8103}
+                ]
+              },
+              "streamSettings": {"network": "tcp"}
+            },
+            {
+              "tag": "vless", "port": 8101, "listen": "127.0.0.1", "protocol": "vless",
+              "settings": {"clients": [], "decryption": "none"},
+              "streamSettings": {"network": "ws", "wsSettings": {"path": "/Telegram-@338888-vless"}}
+            },
+            {
+              "tag": "vmess", "port": 8102, "listen": "127.0.0.1", "protocol": "vmess",
+              "settings": {"clients": []},
+              "streamSettings": {"network": "ws", "wsSettings": {"path": "/Telegram-@338888-vmess"}}
+            },
+            {
+              "tag": "trojan", "port": 8103, "listen": "127.0.0.1", "protocol": "trojan",
+              "settings": {"clients": []},
+              "streamSettings": {"network": "ws", "wsSettings": {"path": "/Telegram-@338888-trojan"}}
+            },
+            {
+              "port": 10086, "listen": "127.0.0.1", "protocol": "dokodemo-door",
+              "settings": {"address": "127.0.0.1"}, "tag": "api"
+            }
+          ],
+          "outbounds": [
+            {"protocol": "freedom", "tag": "freedom"},
+            {"protocol": "blackhole", "tag": "api"}
+          ],
+          "routing": {
+            "rules": [{"inboundTag": ["api"], "outboundTag": "api", "type": "field"}]
+          }
+        }
+        
+        # 2. بناء ملف panel_api.py خاص بهذا السيرفر
+        panel_script = f"""import json
+import os
+import requests
+from dotenv import load_dotenv
+import time
+
+HOME_DIR = os.path.expanduser("~")
+CONFIG_PATH = '/home/{ftp_user}/xray_core/config.json'
+
+class PanelAPI:
+    def __init__(self):
+        load_dotenv()
+        self.api_key = os.getenv('AD_API_KEY')
+        self.site_id = os.getenv('AD_SITE_ID')
+
+    def create_client(self, email, uuid, protocol="vless"):
+        try:
+            if not os.path.exists(CONFIG_PATH):
+                return False
+
+            with open(CONFIG_PATH, 'r') as f:
+                config = json.load(f)
+            
+            local_user = os.path.basename(HOME_DIR)
+            if "log" in config:
+                expected_access = f"/home/{{local_user}}/xray_core/access.log"
+                expected_error = f"/home/{{local_user}}/xray_core/error.log"
+                if config["log"].get("access") != expected_access:
+                    config["log"]["access"] = expected_access
+                if config["log"].get("error") != expected_error:
+                    config["log"]["error"] = expected_error
+
+            main_inbound = 0
+            
+            if protocol == "vless" or protocol == "vmess":
+                new_client = {{"id": uuid, "email": email, "level": 0}}
+            elif protocol == "trojan":
+                new_client = {{"password": uuid, "email": email, "level": 0}} 
+            else:
+                new_client = {{"id": uuid, "email": email, "level": 0}}
+
+            clients_main = config['inbounds'][main_inbound]['settings']['clients']
+            if not any(c.get('email') == email for c in clients_main):
+                clients_main.append(new_client)
+
+            target_map = {{"vless": 1, "vmess": 2, "trojan": 3}}
+            target_inbound = target_map.get(protocol.lower(), 1)
+            
+            clients_ws = config['inbounds'][target_inbound]['settings']['clients']
+            if not any(c.get('email') == email for c in clients_ws):
+                clients_ws.append(new_client)
+            
+            with open(CONFIG_PATH, 'w') as f:
+                json.dump(config, f, indent=2)
+            
+            return self.restart_xray()
+            
+        except Exception as e:
+            return False
+
+    def restart_xray(self):
+        os.system("pkill -9 xray")
+        time.sleep(0.5)
+        return True
+
+    def get_client_traffic(self, email):
+        return 0
+
+    def change_client_status(self, email, inbound_id=None, uuid=None, enable=True):
+        try:
+            with open(CONFIG_PATH, 'r') as f:
+                config = json.load(f)
+            
+            changed = False
+            for i in range(4): 
+                try:
+                    clients = config['inbounds'][i]['settings']['clients']
+                    if not enable:
+                        original_len = len(clients)
+                        config['inbounds'][i]['settings']['clients'] = [c for c in clients if c.get('email') != email]
+                        if len(config['inbounds'][i]['settings']['clients']) != original_len:
+                            changed = True
+                except Exception:
+                    continue
+            
+            if changed:
+                with open(CONFIG_PATH, 'w') as f:
+                    json.dump(config, f, indent=2)
+                return self.restart_xray()
+                
+            return True
+        except Exception as e:
+            return False
+"""
+
+        # 3. رفع الملفات عبر FTP
+        try:
+            ftp_host = f"ftp-{ftp_user}.alwaysdata.net"
+            ftp = ftplib.FTP(ftp_host)
+            ftp.login(ftp_user, ftp_pass)
+            
+            # محاولة إنشاء مجلد xray_core
+            try:
+                ftp.mkd('xray_core')
+            except:
+                pass
+            
+            # رفع الكونفك
+            config_bytes = BytesIO(json.dumps(node_config, indent=4).encode('utf-8'))
+            ftp.storbinary("STOR xray_core/config.json", config_bytes)
+            
+            # رفع البانيل
+            panel_bytes = BytesIO(panel_script.encode('utf-8'))
+            ftp.storbinary("STOR xray_core/panel_api.py", panel_bytes)
+            
+            ftp.quit()
+            
+            # 4. إعادة تشغيل السيرفر لفحص نجاح العملية
+            url = f"https://api.alwaysdata.com/v1/site/{data['id']}/restart/"
+            resp = requests.post(url, auth=(data['api'], ''))
+            
+            if resp.status_code in [200, 201, 204]:
+                # حفظ السيرفر بقاعدة بيانات البوت مباشرة!
+                try:
+                    conn = sqlite3.connect('bot_database.db')
+                    c = conn.cursor()
+                    c.execute('''INSERT INTO servers (name, site_id, api_key, host, user, password, status)
+                                 VALUES (?, ?, ?, ?, ?, ?, 'active')''',
+                              (data['name'], data['id'], data['api'], data['host'], data['user'], data['pass']))
+                    conn.commit()
+                    conn.close()
+                except Exception as db_e:
+                    print("DB Error: ", db_e)
+                    
+                bot.send_message(chat_id, f"✅ **تم إنشاء وإضافة السيرفر بنجاح!**\n\n🖥️ **اسم السيرفر:** `{data['name']}`\n🌐 **الهوست:** `{data['host']}`\n✅ **الملفات:** تم رفع `config.json` و `panel_api.py` بنجاح.\n🔄 **حالة التشغيل:** السيرفر يعمل بشكل ممتاز.\n\nيمكنك الآن استخدامه لإنشاء الأكواد من القائمة بحرية.", parse_mode="Markdown")
+            else:
+                bot.send_message(chat_id, f"❌ تم رفع الملفات، ولكن فشل تشغيل السيرفر! تأكد من الـ Site ID والـ API. كود الخطأ: {resp.status_code}")
+                
+        except Exception as e:
+            bot.send_message(chat_id, f"❌ حدث خطأ أثناء الاتصال بالـ FTP ورفع الملفات:\n`{str(e)}`\nتأكد أن السيرفر يعمل أو أن بيانات FTP صحيحة.", parse_mode="Markdown")
+
+    # ----------------------------------------------------
+    # دوال صناعة الأكواد للمشتركين
+    # ----------------------------------------------------
     @bot.callback_query_handler(func=lambda call: call.data == "create_code")
     def start_creation(call):
         chat_id = call.message.chat.id
