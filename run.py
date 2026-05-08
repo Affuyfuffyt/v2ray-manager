@@ -5,6 +5,7 @@ import subprocess
 import time
 import config
 import os
+import json
 from xray_core.panel_api import PanelAPI
 
 # استدعاء المعالجات
@@ -23,10 +24,6 @@ except ImportError:
 # 1. تهيئة البوت والـ API
 bot = telebot.TeleBot(config.BOT_TOKEN)
 api = PanelAPI()
-
-# 🔥 استخراج الأمر الديناميكي المخصص لهذا السيرفر من ملف .env 🔥
-# إذا لم يكن موجوداً (في حالة السيرفر الأول)، سيكون 'start' بشكل افتراضي
-MY_CMD = os.getenv("MY_BOT_COMMAND", "start")
 
 # 🔥 التصليح الجذري للفلتر حتى ما يعلك الأزرار (مثل حالة الخادم) 🔥
 class IsAdmin(telebot.custom_filters.SimpleCustomFilter):
@@ -63,7 +60,7 @@ def get_server_status_text():
             filled = int(percent / 10)
             return '█' * filled + '▒' * (10 - filled)
 
-        text = f"🖥️ | 𝗦𝗘𝗥𝗩𝗘𝗥 𝗥𝗘𝗦𝗢𝗨𝗥𝗖𝗘𝗦 ({MY_CMD})\n"
+        text = f"🖥️ | 𝗦𝗘𝗥𝗩𝗘𝗥 𝗥𝗘𝗦𝗢𝗨𝗥𝗖𝗘𝗦\n"
         text += f"━━━━━━━━━━━━━━━━━━\n"
         text += f"⚙️ **CPU:** `[{make_bar(cpu_usage)}]` {cpu_usage:.1f}%\n"
         text += f"🗄️ **RAM:** `[{make_bar(ram_percent)}]` {ram_percent}%\n"
@@ -98,21 +95,47 @@ radar_flow.register_radar_handlers(bot)
 user_handlers.register_user_handlers(bot) 
 servers_flow.register_servers_handlers(bot) # 🔥 تفعيل أزرار شبكة السيرفرات الجديدة 🔥
 
-# 🔥 المعمارية الجديدة: استقبال الأمر المخصص لهذا السيرفر حصراً 🔥
-@bot.message_handler(commands=[MY_CMD])
-def start_command(message):
+# ==========================================
+# 🔥 المعمارية الجديدة: الفلتر الذكي لاستقبال جميع الأوامر (الرئيسي والفرعي) 🔥
+# ==========================================
+@bot.message_handler(func=lambda message: message.text and message.text.startswith('/'))
+def handle_dynamic_commands(message):
     chat_id = message.chat.id
+    command = message.text.strip().split('@')[0] # لأخذ الأمر الصافي (مثل /start أو /linkapp)
+    
     try:
-        # مقارنة دقيقة للتأكد من التعرف على الأدمن
+        # 1. إذا كان المستخدم هو الأدمن
         if str(chat_id) == str(config.ADMIN_ID):
-            bot.send_message(chat_id, f"✅ **متصل بالسيرفر المخصص للأمر:** `/{MY_CMD}`", parse_mode="Markdown")
-            admin_start.show_main_menu(bot, chat_id)
+            
+            # أ- إذا كان الأمر /start (السيرفر الرئيسي)
+            if command == "/start":
+                bot.send_message(chat_id, "✅ **متصل بالسيرفر الرئيسي (المحلي)**", parse_mode="Markdown")
+                admin_start.show_main_menu(bot, chat_id)
+                return
+                
+            # ب- إذا كان الأمر مخصص لسيرفر فرعي (يقرأ من ملف json)
+            mapping_file = "server_commands.json"
+            if os.path.exists(mapping_file):
+                with open(mapping_file, "r", encoding="utf-8") as f:
+                    mapping = json.load(f)
+                    
+                if command in mapping:
+                    server_name = mapping[command]
+                    bot.send_message(chat_id, f"✅ **متصل بالسيرفر الفرعي:** `{server_name}`\nلـلأمر: `{command}`", parse_mode="Markdown")
+                    admin_start.show_main_menu(bot, chat_id)
+                    return
+                    
+        # 2. إذا كان المستخدم عادي (يستجيب فقط لأمر /start)
         else:
-            # توجيه المستخدم العادي
-            user_handlers.show_user_main_menu(bot, chat_id)
+            if command == "/start":
+                user_handlers.show_user_main_menu(bot, chat_id)
+                
     except Exception as e:
         bot.send_message(chat_id, f"⚠️ عذراً، حدث خطأ داخلي في البوت:\n`{e}`", parse_mode="Markdown")
 
+# ==========================================
+# Callbacks لحالة السيرفر
+# ==========================================
 @bot.callback_query_handler(func=lambda call: call.data == "server_status", is_admin=True)
 def send_server_status(call):
     text = get_server_status_text()
@@ -166,7 +189,7 @@ def handle_status_callbacks(call):
 # ==========================================
 if __name__ == "__main__":
     print(f"🚀 البوت يعمل الآن للأدمن ID: {config.ADMIN_ID}")
-    print(f"🔗 الأمر المخصص للتحكم بهذا السيرفر هو: /{MY_CMD}")
+    print("🔗 البوت جاهز لاستقبال الأوامر الديناميكية (السيرفر الرئيسي والفرعية).")
     
     threading.Thread(target=start_quota_monitor, daemon=True).start()
     threading.Thread(target=start_radar_monitor, daemon=True).start()
