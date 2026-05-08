@@ -4,7 +4,7 @@ echo "=================================================="
 echo "  🚀 أداة إدارة V2Ray (النسخة الاحترافية بـ API) "
 echo "=================================================="
 
-# 1. تنظيف وإيقاف العمليات
+# 1. تنظيف وإيقاف العمليات القديمة
 pkill -9 xray
 pkill -9 -f run.py
 
@@ -38,7 +38,7 @@ echo "[+] جاري سحب ملفات البوت..."
 git clone https://github.com/Affuyfuffyt/v2ray-manager.git $WORK_DIR
 cd $WORK_DIR
 
-# 6. نقل ملف config.json للمكان الصحيح وتصحيح المسارات 🔥
+# 6. نقل ملف config.json وتصحيح المسارات 🔥
 cp xray_core/config.json $XRAY_DIR/config.json
 
 echo "[+] جاري تصحيح مسارات السيرفر المحلي لتعمل مع حساب: $FTP_USER"
@@ -54,7 +54,7 @@ echo "AD_SITE_ID=$AD_SITE_ID" >> .env
 echo "AD_DOMAIN=$AD_DOMAIN" >> .env
 echo "FTP_USER=$FTP_USER" >> .env
 
-# 8. تجهيز ملف الريستارت التلقائي والدومين العالمي
+# 8. تجهيز ملف الريستارت التلقائي
 echo "$AD_SITE_ID" > $HOME/alwaysdata_keys.txt
 echo "$AD_API_KEY" >> $HOME/alwaysdata_keys.txt
 echo "$AD_DOMAIN" >> $HOME/alwaysdata_keys.txt
@@ -62,10 +62,6 @@ echo "$AD_DOMAIN" >> $HOME/alwaysdata_keys.txt
 # 9. تثبيت المكاتب
 echo "[+] جاري تثبيت المتطلبات..."
 pip install -r requirements.txt
-
-# 🔥 الإضافة الجديدة: تشغيل سكربت صيد الأوامر وتحديث القائمة 🔥
-echo "[+] جاري فحص السيرفرات السابقة وتعيين أمر جديد..."
-python3 assign_cmd.py
 
 # 10. إنشاء ملف المراقب الأبدي (Keep Alive) 
 cat << 'EOF' > $HOME/keep_alive.sh
