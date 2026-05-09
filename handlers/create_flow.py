@@ -602,7 +602,7 @@ def register_create_handlers(bot):
         selected_port = data.get('port', 443)
         host_domain = "wathfor.alwaysdata.net" 
         
-        # استخراج الدومين بناءً على السيرفر
+        # 🔥 التعديل الجذري هنا: استخراج الهوست الحقيقي من قاعدة البيانات مباشرة 🔥
         if server_id == 1:
             try:
                 home_dir = os.path.expanduser("~")
@@ -615,7 +615,12 @@ def register_create_handlers(bot):
             except: pass
         else:
             srv = get_server_details(server_id)
-            if srv: host_domain = f"{srv[5]}.alwaysdata.net"
+            if srv:
+                # srv[4] هو الهوست الحقيقي المحفوظ في قاعدة البيانات
+                raw_host = srv[4] 
+                if raw_host.startswith("ftp-"):
+                    raw_host = raw_host[4:]
+                host_domain = raw_host
         
         if selected_port == 443:
             security_type = "tls"
