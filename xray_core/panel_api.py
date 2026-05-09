@@ -4,13 +4,12 @@ import requests
 from dotenv import load_dotenv
 import time
 
-# 🔥 اكتشاف المسار الأساسي تلقائياً لأي سيرفر 🔥
+# 🔥 اكتشاف المسار الأساسي تلقائياً لأي سيرفر (wathfor أو linkapp أو غيره) 🔥
 HOME_DIR = os.path.expanduser("~")
 CONFIG_PATH = f'{HOME_DIR}/xray_core/config.json'
 
 class PanelAPI:
     def __init__(self):
-        # تحميل المفاتيح للاتصال المستقبلي إذا لزم الأمر
         load_dotenv()
         self.api_key = os.getenv('AD_API_KEY')
         self.site_id = os.getenv('AD_SITE_ID')
@@ -24,7 +23,6 @@ class PanelAPI:
             with open(CONFIG_PATH, 'r') as f:
                 config = json.load(f)
             
-            # 🔥 إضافة المشترك للمنفذ الرئيسي (Fallback) ليتم حساب استهلاكه 🔥
             main_inbound = 0
             
             if protocol == "vless" or protocol == "vmess":
@@ -58,7 +56,6 @@ class PanelAPI:
             return False
 
     def restart_xray(self):
-        # 1. إيقاف المحرك لقطع الاتصال عن المنتهين وإجبار السيرفر على إعادة التشغيل
         os.system("pkill -9 xray")
         time.sleep(0.5)
         return True
@@ -72,7 +69,6 @@ class PanelAPI:
                 config = json.load(f)
             
             changed = False
-            # البحث وحذف المشترك من جميع البوابات (من 0 إلى 3)
             for i in range(4): 
                 try:
                     clients = config['inbounds'][i]['settings']['clients']
