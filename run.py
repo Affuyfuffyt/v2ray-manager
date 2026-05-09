@@ -5,7 +5,6 @@ import subprocess
 import time
 import config
 import os
-import json
 from xray_core.panel_api import PanelAPI
 
 # استدعاء المعالجات
@@ -95,47 +94,20 @@ radar_flow.register_radar_handlers(bot)
 user_handlers.register_user_handlers(bot) 
 servers_flow.register_servers_handlers(bot) # 🔥 تفعيل أزرار شبكة السيرفرات الجديدة 🔥
 
-# ==========================================
-# 🔥 المعمارية الجديدة: الفلتر الذكي لاستقبال جميع الأوامر (الرئيسي والفرعي) 🔥
-# ==========================================
-@bot.message_handler(func=lambda message: message.text and message.text.startswith('/'))
-def handle_dynamic_commands(message):
+# 🔥 فتح أمر البداية للكل مع صائد الأخطاء ومطابقة الـ ID 🔥
+@bot.message_handler(commands=['start'])
+def start_command(message):
     chat_id = message.chat.id
-    command = message.text.strip().split('@')[0] # لأخذ الأمر الصافي (مثل /start أو /linkapp)
-    
     try:
-        # 1. إذا كان المستخدم هو الأدمن
+        # مقارنة دقيقة للتأكد من التعرف على الأدمن
         if str(chat_id) == str(config.ADMIN_ID):
-            
-            # أ- إذا كان الأمر /start (السيرفر الرئيسي)
-            if command == "/start":
-                bot.send_message(chat_id, "✅ **متصل بالسيرفر الرئيسي (المحلي)**", parse_mode="Markdown")
-                admin_start.show_main_menu(bot, chat_id)
-                return
-                
-            # ب- إذا كان الأمر مخصص لسيرفر فرعي (يقرأ من ملف json)
-            mapping_file = "server_commands.json"
-            if os.path.exists(mapping_file):
-                with open(mapping_file, "r", encoding="utf-8") as f:
-                    mapping = json.load(f)
-                    
-                if command in mapping:
-                    server_name = mapping[command]
-                    bot.send_message(chat_id, f"✅ **متصل بالسيرفر الفرعي:** `{server_name}`\nلـلأمر: `{command}`", parse_mode="Markdown")
-                    admin_start.show_main_menu(bot, chat_id)
-                    return
-                    
-        # 2. إذا كان المستخدم عادي (يستجيب فقط لأمر /start)
+            admin_start.show_main_menu(bot, chat_id)
         else:
-            if command == "/start":
-                user_handlers.show_user_main_menu(bot, chat_id)
-                
+            # توجيه المستخدم العادي
+            user_handlers.show_user_main_menu(bot, chat_id)
     except Exception as e:
         bot.send_message(chat_id, f"⚠️ عذراً، حدث خطأ داخلي في البوت:\n`{e}`", parse_mode="Markdown")
 
-# ==========================================
-# Callbacks لحالة السيرفر
-# ==========================================
 @bot.callback_query_handler(func=lambda call: call.data == "server_status", is_admin=True)
 def send_server_status(call):
     text = get_server_status_text()
@@ -189,7 +161,6 @@ def handle_status_callbacks(call):
 # ==========================================
 if __name__ == "__main__":
     print(f"🚀 البوت يعمل الآن للأدمن ID: {config.ADMIN_ID}")
-    print("🔗 البوت جاهز لاستقبال الأوامر الديناميكية (السيرفر الرئيسي والفرعية).")
     
     threading.Thread(target=start_quota_monitor, daemon=True).start()
     threading.Thread(target=start_radar_monitor, daemon=True).start()
