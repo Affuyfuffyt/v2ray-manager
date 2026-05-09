@@ -4,7 +4,7 @@ import requests
 from dotenv import load_dotenv
 import time
 
-# 🔥 اكتشاف المسار الأساسي تلقائياً 🔥
+# 🔥 اكتشاف المسار الأساسي تلقائياً لأي سيرفر 🔥
 HOME_DIR = os.path.expanduser("~")
 CONFIG_PATH = f'{HOME_DIR}/xray_core/config.json'
 
@@ -24,17 +24,6 @@ class PanelAPI:
             with open(CONFIG_PATH, 'r') as f:
                 config = json.load(f)
             
-            # 🔥 تصحيح مسار اللوكات التلقائي (بالاعتماد على المسار المطلق) 🔥
-            # يستخرج اسم اليوزر الحالي ويصحح المسار فوراً لضمان عمل Xray بالخلفية
-            local_user = os.path.basename(HOME_DIR)
-            if "log" in config:
-                expected_access = f"/home/{local_user}/xray_core/access.log"
-                expected_error = f"/home/{local_user}/xray_core/error.log"
-                if config["log"].get("access") != expected_access:
-                    config["log"]["access"] = expected_access
-                if config["log"].get("error") != expected_error:
-                    config["log"]["error"] = expected_error
-
             # 🔥 إضافة المشترك للمنفذ الرئيسي (Fallback) ليتم حساب استهلاكه 🔥
             main_inbound = 0
             
@@ -58,7 +47,7 @@ class PanelAPI:
             if not any(c.get('email') == email for c in clients_ws):
                 clients_ws.append(new_client)
             
-            # حفظ الملف بعد التعديل والتصحيح
+            # حفظ الملف
             with open(CONFIG_PATH, 'w') as f:
                 json.dump(config, f, indent=2)
             
