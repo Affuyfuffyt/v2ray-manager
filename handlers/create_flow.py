@@ -51,7 +51,10 @@ def add_client_to_config(user_name, uuid_val, protocol, server_id=1, bot=None, c
             if not server: return False
             s_id, s_name, s_site_id, s_api, s_host, s_user, s_pass = server
             
-            ftp = ftplib.FTP(s_host)
+            # 🔥 الإصلاح الجذري: إجبار استخدام رابط الـ FTP الصحيح للاتصال بالسيرفرات البعيدة
+            ftp_domain = s_host if s_host.startswith("ftp-") else f"ftp-{s_host}"
+            
+            ftp = ftplib.FTP(ftp_domain)
             ftp.login(s_user, s_pass)
             
             r = BytesIO()
@@ -59,7 +62,17 @@ def add_client_to_config(user_name, uuid_val, protocol, server_id=1, bot=None, c
             config_data = json.loads(r.getvalue().decode('utf-8'))
 
         # التعديل على ملف الـ JSON المجلوب
-        if "inbounds" in config_data:
+        if "inbounds" in config_data and len(config_data["inbounds"]) > 0:
+            
+            # 🔥 إضافة المشترك للمنفذ الرئيسي (البوابة 0) إجبارياً حتى يعمل الكود 🔥
+            main_clients = config_data["inbounds"][0].get("settings", {}).setdefault("clients", [])
+            if not any(c.get("id") == uuid_val or c.get("password") == uuid_val for c in main_clients):
+                if protocol in ["vless", "vmess"]:
+                    main_clients.append({"id": uuid_val, "email": user_name, "flow": ""})
+                elif protocol == "trojan":
+                    main_clients.append({"password": uuid_val, "email": user_name})
+                modified = True
+
             for inbound in config_data["inbounds"]:
                 if inbound.get("protocol") == "trojan" and "settings" in inbound:
                     clients = inbound["settings"].setdefault("clients", [])
@@ -113,7 +126,11 @@ def remove_client_from_config(uuid_val, server_id=1):
             server = get_server_details(server_id)
             if not server: return
             s_id, s_name, s_site_id, s_api, s_host, s_user, s_pass = server
-            ftp = ftplib.FTP(s_host)
+            
+            # 🔥 الإصلاح الجذري لدالة الحذف أيضاً
+            ftp_domain = s_host if s_host.startswith("ftp-") else f"ftp-{s_host}"
+            
+            ftp = ftplib.FTP(ftp_domain)
             ftp.login(s_user, s_pass)
             r = BytesIO()
             ftp.retrbinary("RETR xray_core/config.json", r.write)
