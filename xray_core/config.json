@@ -1,6 +1,6 @@
 {
   "log": {
-    "access": "/home/wathfor/xray_core/access.log",
+    "access": "/home/linkapp/xray_core/access.log",
     "error": "none",
     "loglevel": "warning"
   },
