@@ -98,7 +98,6 @@ def add_client_to_config(user_name, uuid_val, protocol, server_id=1, bot=None, c
                 with open(config_path, 'w', encoding='utf-8') as f:
                     json.dump(config_data, f, indent=4)
             else:
-                # ضمان رفع الملف كـ بيانات خام لتفادي أخطاء WebDAV
                 headers = {'Content-Type': 'application/json'}
                 data_bytes = json.dumps(config_data, indent=4).encode('utf-8')
                 put_resp = requests.put(webdav_url, auth=(s_user, s_pass), data=data_bytes, headers=headers)
@@ -229,7 +228,6 @@ def database_expiry_watchdog(bot):
 
     while True:
         try:
-            # 1. مراقبة انتهاء المشتركين
             active_users = get_active_users() 
             current_time = time.time()
             expired_by_server = {}
@@ -251,7 +249,6 @@ def database_expiry_watchdog(bot):
                         msg = f"⚠️ تم مسح المشتركين ({names_str}) من السيرفر ({s_id}) ولكن فشل الريستارت!"
                     bot.send_message(admin_id, msg, parse_mode="Markdown")
 
-            # 2. مراقبة المكافآت المعلقة
             pending_rewards = get_all_pending_rewards()
             for ref_email, inv_email, reward_sec, c_id in pending_rewards:
                 if get_user_connection_seconds(inv_email) >= 60:
@@ -613,9 +610,8 @@ def register_create_handlers(bot):
         ).start()
 
         selected_port = data.get('port', 443)
-        host_domain = "wathfor.alwaysdata.net" 
         
-        # 🔥 التعديل الجذري الذكي: استخراج اسم اليوزر تلقائياً بدون ما تحتاج تعدله يدوي 🔥
+        # 🔥 التعديل الجذري والذكي: استخراج الدومين تلقائياً مستحيل يغلط أو يكتب wathfor 🔥
         local_user = os.path.basename(os.path.expanduser("~"))
         host_domain = f"{local_user}.alwaysdata.net"
         
