@@ -1,36 +1,11 @@
 {
   "log": {
-    "access": "access.log",
-    "error": "error.log",
+    "access": "/home/wathfor/xray_core/access.log",
+    "error": "none",
     "loglevel": "warning"
-  },
-  "stats": {},
-  "api": {
-    "tag": "api",
-    "services": [
-      "StatsService",
-      "HandlerService",
-      "LoggerService",
-      "ReflectionService"
-    ]
-  },
-  "policy": {
-    "levels": {
-      "0": {
-        "statsUserUplink": true,
-        "statsUserDownlink": true
-      }
-    },
-    "system": {
-      "statsInboundUplink": true,
-      "statsInboundDownlink": true,
-      "statsOutboundUplink": true,
-      "statsOutboundDownlink": true
-    }
   },
   "inbounds": [
     {
-      "tag": "vless_tcp_fallback",
       "port": 8100,
       "listen": "0.0.0.0",
       "protocol": "vless",
@@ -57,7 +32,6 @@
       }
     },
     {
-      "tag": "vless",
       "port": 8101,
       "listen": "127.0.0.1",
       "protocol": "vless",
@@ -73,7 +47,6 @@
       }
     },
     {
-      "tag": "vmess",
       "port": 8102,
       "listen": "127.0.0.1",
       "protocol": "vmess",
@@ -88,7 +61,6 @@
       }
     },
     {
-      "tag": "trojan",
       "port": 8103,
       "listen": "127.0.0.1",
       "protocol": "trojan",
@@ -101,36 +73,11 @@
           "path": "/Telegram-@338888-trojan"
         }
       }
-    },
-    {
-      "port": 10086,
-      "listen": "127.0.0.1",
-      "protocol": "dokodemo-door",
-      "settings": {
-        "address": "127.0.0.1"
-      },
-      "tag": "api"
     }
   ],
   "outbounds": [
     {
-      "protocol": "freedom",
-      "tag": "freedom"
-    },
-    {
-      "protocol": "blackhole",
-      "tag": "api"
+      "protocol": "freedom"
     }
-  ],
-  "routing": {
-    "rules": [
-      {
-        "inboundTag": [
-          "api"
-        ],
-        "outboundTag": "api",
-        "type": "field"
-      }
-    ]
-  }
+  ]
 }
