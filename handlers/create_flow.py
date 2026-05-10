@@ -620,7 +620,7 @@ def register_create_handlers(bot):
         ).start()
 
         selected_port = data.get('port', 443)
-        host_domain = "wathfor.alwaysdata.net" 
+        host_domain = "alowapp.alwaysdata.net" 
         
         srv = None
         if server_id == 1:
