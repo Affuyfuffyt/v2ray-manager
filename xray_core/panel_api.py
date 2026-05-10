@@ -3,7 +3,7 @@ import os
 import time
 
 # 🔥 المسار اليدوي اللي طلبته (تغير wathfor لكل سيرفر جديد) 🔥
-CONFIG_PATH = '/home/wathfor/xray_core/config.json'
+CONFIG_PATH = '/home/linkapp/xray_core/config.json'
 
 class PanelAPI:
     def __init__(self):
