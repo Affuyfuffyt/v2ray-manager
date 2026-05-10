@@ -1,7 +1,7 @@
 {
   "log": {
-    "access": "/home/linkapp/xray_core/access.log",
-    "error": "/home/linkapp/xray_core/error.log",
+    "access": "/home/alowapp/xray_core/access.log",
+    "error": "/home/alowapp/xray_core/error.log",
     "loglevel": "warning"
   },
   "stats": {},
