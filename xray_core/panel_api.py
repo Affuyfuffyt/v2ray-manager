@@ -1,23 +1,18 @@
 import json
 import os
-import requests
-from dotenv import load_dotenv
 import time
 
-# 🔥 اكتشاف المسار الأساسي تلقائياً لأي سيرفر (wathfor أو linkapp أو غيره) 🔥
-HOME_DIR = os.path.expanduser("~")
-CONFIG_PATH = f'{HOME_DIR}/xray_core/config.json'
+# 🔥 المسار اليدوي اللي طلبته (تغير wathfor لكل سيرفر جديد) 🔥
+CONFIG_PATH = '/home/wathfor/xray_core/config.json'
 
 class PanelAPI:
     def __init__(self):
-        load_dotenv()
-        self.api_key = os.getenv('AD_API_KEY')
-        self.site_id = os.getenv('AD_SITE_ID')
+        pass
 
     def create_client(self, email, uuid, protocol="vless"):
         try:
             if not os.path.exists(CONFIG_PATH):
-                print(f"❌ Error: Config file not found at {CONFIG_PATH}")
+                print(f"❌ خطأ: ملف الإعدادات غير موجود في {CONFIG_PATH}")
                 return False
 
             with open(CONFIG_PATH, 'r') as f:
@@ -45,7 +40,6 @@ class PanelAPI:
             if not any(c.get('email') == email for c in clients_ws):
                 clients_ws.append(new_client)
             
-            # حفظ الملف
             with open(CONFIG_PATH, 'w') as f:
                 json.dump(config, f, indent=2)
             
@@ -87,5 +81,4 @@ class PanelAPI:
                 
             return True
         except Exception as e:
-            print(f"Error changing status: {e}")
             return False
