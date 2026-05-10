@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 import time
 
 # المسار الثابت اللي راح يستبدله سكربت التيرمكس باليوزر الجديد
-CONFIG_PATH = '/home/alowapp/xray_core/config.json'
+CONFIG_PATH = '/home/wathfor/xray_core/config.json'
 
 class PanelAPI:
     def __init__(self):
