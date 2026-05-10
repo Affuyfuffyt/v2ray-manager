@@ -9,8 +9,6 @@ import requests
 import threading
 import os
 import urllib.parse
-import ftplib
-from io import BytesIO
 
 # 👇 استدعاء دوال الحفظ وقاعدة البيانات
 from database import save_user, extend_json_expiry
@@ -31,7 +29,7 @@ creation_data = {}
 watchdog_started = False
 
 # ==========================================
-# 🛠️ دالة الإضافة الذكية (تدعم السيرفر المحلي والبعيد)
+# 🛠️ دالة الإضافة الذكية (تصحيح المسارات + WebDAV)
 # ==========================================
 def add_client_to_config(user_name, uuid_val, protocol, server_id=1, bot=None, chat_id=None):
     try:
@@ -39,40 +37,52 @@ def add_client_to_config(user_name, uuid_val, protocol, server_id=1, bot=None, c
         config_data = {}
 
         if server_id == 1:
-            # 📌 إضافة للسيرفر المحلي (نفس السيرفر)
+            # 📌 إضافة للسيرفر المحلي
+            # البوت بالسيرفر المحلي راح يلكى الكونفك بمسار التيرمكس اللي تثبت بي
             home_dir = os.path.expanduser("~")
+            local_user = os.path.basename(home_dir)
             config_path = f"{home_dir}/xray_core/config.json"
+            
             if os.path.exists(config_path):
                 with open(config_path, 'r', encoding='utf-8') as f:
                     config_data = json.load(f)
+                    
+                # 🔥 تصحيح المسار للسيرفر المحلي تلقائياً 🔥
+                if "log" in config_data:
+                    expected_access = f"/home/{local_user}/xray_core/access.log"
+                    expected_error = f"/home/{local_user}/xray_core/error.log"
+                    if config_data["log"].get("access") != expected_access:
+                        config_data["log"]["access"] = expected_access
+                        modified = True
+                    if config_data["log"].get("error") != expected_error:
+                        config_data["log"]["error"] = expected_error
+                        modified = True
         else:
-            # 🌐 إضافة لسيرفر بعيد عبر FTP
+            # 🌐 إضافة لسيرفر بعيد عبر WebDAV
             server = get_server_details(server_id)
             if not server: return False
             s_id, s_name, s_site_id, s_api, s_host, s_user, s_pass = server
             
-            # 🔥 الإصلاح الجذري: إجبار استخدام رابط الـ FTP الصحيح للاتصال بالسيرفرات البعيدة
-            ftp_domain = s_host if s_host.startswith("ftp-") else f"ftp-{s_host}"
+            webdav_url = f"https://webdav-{s_user}.alwaysdata.net/xray_core/config.json"
             
-            ftp = ftplib.FTP(ftp_domain)
-            ftp.login(s_user, s_pass)
-            
-            r = BytesIO()
-            ftp.retrbinary("RETR xray_core/config.json", r.write)
-            config_data = json.loads(r.getvalue().decode('utf-8'))
+            resp = requests.get(webdav_url, auth=(s_user, s_pass))
+            if resp.status_code != 200:
+                raise Exception(f"فشل جلب الملف: {resp.status_code}")
+            config_data = resp.json()
 
-        # التعديل على ملف الـ JSON المجلوب
-        if "inbounds" in config_data and len(config_data["inbounds"]) > 0:
-            
-            # 🔥 إضافة المشترك للمنفذ الرئيسي (البوابة 0) إجبارياً حتى يعمل الكود 🔥
-            main_clients = config_data["inbounds"][0].get("settings", {}).setdefault("clients", [])
-            if not any(c.get("id") == uuid_val or c.get("password") == uuid_val for c in main_clients):
-                if protocol in ["vless", "vmess"]:
-                    main_clients.append({"id": uuid_val, "email": user_name, "flow": ""})
-                elif protocol == "trojan":
-                    main_clients.append({"password": uuid_val, "email": user_name})
-                modified = True
+            # 🔥 التحديث الجذري: تصحيح المسار المطلق للسيرفر الفرعي تلقائياً 🔥
+            if "log" in config_data:
+                expected_access = f"/home/{s_user}/xray_core/access.log"
+                expected_error = f"/home/{s_user}/xray_core/error.log"
+                if config_data["log"].get("access") != expected_access:
+                    config_data["log"]["access"] = expected_access
+                    modified = True
+                if config_data["log"].get("error") != expected_error:
+                    config_data["log"]["error"] = expected_error
+                    modified = True
 
+        # التعديل على ملف الـ JSON وإضافة المشترك
+        if "inbounds" in config_data:
             for inbound in config_data["inbounds"]:
                 if inbound.get("protocol") == "trojan" and "settings" in inbound:
                     clients = inbound["settings"].setdefault("clients", [])
@@ -99,9 +109,12 @@ def add_client_to_config(user_name, uuid_val, protocol, server_id=1, bot=None, c
                 with open(config_path, 'w', encoding='utf-8') as f:
                     json.dump(config_data, f, indent=4)
             else:
-                w = BytesIO(json.dumps(config_data, indent=4).encode('utf-8'))
-                ftp.storbinary("STOR xray_core/config.json", w)
-                ftp.quit()
+                # ضمان رفع الملف كـ بيانات خام لتفادي أخطاء WebDAV
+                headers = {'Content-Type': 'application/json'}
+                data_bytes = json.dumps(config_data, indent=4).encode('utf-8')
+                put_resp = requests.put(webdav_url, auth=(s_user, s_pass), data=data_bytes, headers=headers)
+                if put_resp.status_code not in (200, 201, 204):
+                    raise Exception(f"فشل حفظ الملف: {put_resp.status_code}")
         return True
     except Exception as e:
         print(f"Error adding to config: {e}")
@@ -109,7 +122,7 @@ def add_client_to_config(user_name, uuid_val, protocol, server_id=1, bot=None, c
         return False
 
 # ==========================================
-# 🗑️ دالة حذف المشترك المنتهي
+# 🗑️ دالة حذف المشترك المنتهي (عبر WebDAV أيضاً)
 # ==========================================
 def remove_client_from_config(uuid_val, server_id=1):
     try:
@@ -126,15 +139,11 @@ def remove_client_from_config(uuid_val, server_id=1):
             server = get_server_details(server_id)
             if not server: return
             s_id, s_name, s_site_id, s_api, s_host, s_user, s_pass = server
+            webdav_url = f"https://webdav-{s_user}.alwaysdata.net/xray_core/config.json"
             
-            # 🔥 الإصلاح الجذري لدالة الحذف أيضاً
-            ftp_domain = s_host if s_host.startswith("ftp-") else f"ftp-{s_host}"
-            
-            ftp = ftplib.FTP(ftp_domain)
-            ftp.login(s_user, s_pass)
-            r = BytesIO()
-            ftp.retrbinary("RETR xray_core/config.json", r.write)
-            config_data = json.loads(r.getvalue().decode('utf-8'))
+            resp = requests.get(webdav_url, auth=(s_user, s_pass))
+            if resp.status_code == 200:
+                config_data = resp.json()
 
         if "inbounds" in config_data:
             for inbound in config_data["inbounds"]:
@@ -150,9 +159,9 @@ def remove_client_from_config(uuid_val, server_id=1):
                 with open(config_path, 'w', encoding='utf-8') as f:
                     json.dump(config_data, f, indent=4)
             else:
-                w = BytesIO(json.dumps(config_data, indent=4).encode('utf-8'))
-                ftp.storbinary("STOR xray_core/config.json", w)
-                ftp.quit()
+                headers = {'Content-Type': 'application/json'}
+                data_bytes = json.dumps(config_data, indent=4).encode('utf-8')
+                requests.put(webdav_url, auth=(s_user, s_pass), data=data_bytes, headers=headers)
     except Exception as e:
         print(f"Error removing from config: {e}")
 
@@ -213,7 +222,6 @@ def auto_restart_on_expiry(bot, chat_id, expiry_time, user_name, uuid_val, proto
     fail_msg = f"⚠️ انتهى وقت `{user_name}` ولكن فشل الريستارت التلقائي للسيرفر!"
     restart_alwaysdata(bot, chat_id, success_msg, fail_msg, server_id)
 
-
 # ==========================================
 # 👁️ مراقب قاعدة البيانات
 # ==========================================
@@ -231,7 +239,6 @@ def database_expiry_watchdog(bot):
 
     while True:
         try:
-            # 1. مراقبة انتهاء المشتركين
             active_users = get_active_users() 
             current_time = time.time()
             expired_by_server = {}
@@ -253,7 +260,6 @@ def database_expiry_watchdog(bot):
                         msg = f"⚠️ تم مسح المشتركين ({names_str}) من السيرفر ({s_id}) ولكن فشل الريستارت!"
                     bot.send_message(admin_id, msg, parse_mode="Markdown")
 
-            # 2. مراقبة المكافآت المعلقة
             pending_rewards = get_all_pending_rewards()
             for ref_email, inv_email, reward_sec, c_id in pending_rewards:
                 if get_user_connection_seconds(inv_email) >= 60:
@@ -277,7 +283,6 @@ def register_create_handlers(bot):
         threading.Thread(target=database_expiry_watchdog, args=(bot,), daemon=True).start()
         watchdog_started = True
 
-    # 🔥 التحديث: اختيار السيرفر أولاً 🔥
     @bot.callback_query_handler(func=lambda call: call.data == "create_code")
     def start_creation(call):
         chat_id = call.message.chat.id
@@ -581,12 +586,12 @@ def register_create_handlers(bot):
         
         expiry_time = time.time() + sec
 
-        # الإضافة لملف config.json (محلي أو بعيد)
-        bot.send_message(chat_id, "⏳ جاري زراعة الكود في السيرفر المطلوب، يرجى الانتظار...")
+        # الإضافة لملف config.json وتصحيح المسارات
+        bot.send_message(chat_id, "⏳ جاري زراعة الكود وتصحيح المسارات، يرجى الانتظار...")
         success = add_client_to_config(data['name'], data['uuid'], protocol, server_id, bot, chat_id)
         
         if not success:
-            bot.send_message(chat_id, "❌ فشلت عملية الإضافة للسيرفر البعيد! تأكد من بيانات FTP.")
+            bot.send_message(chat_id, "❌ فشلت عملية الإضافة للسيرفر البعيد! تأكد من بياناتك.")
             creation_data.pop(chat_id, None)
             return
 
@@ -595,11 +600,9 @@ def register_create_handlers(bot):
 
         try:
             selected_port = data.get('port', 443)
-            # تم إضافة server_id للـ DB
             add_user(data['name'], data['uuid'], selected_port, data['quota_bytes'], expiry_time, server_id)
         except Exception as e: print(f"Error saving to SQLite DB: {e}")
 
-        # المكافآت
         new_ref_code = "REF-" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=5))
         try: assign_ref_code(data['name'], new_ref_code)
         except: pass
@@ -619,7 +622,7 @@ def register_create_handlers(bot):
         selected_port = data.get('port', 443)
         host_domain = "wathfor.alwaysdata.net" 
         
-        # 🔥 التعديل الجذري هنا: استخراج الهوست الحقيقي من قاعدة البيانات مباشرة 🔥
+        srv = None
         if server_id == 1:
             try:
                 home_dir = os.path.expanduser("~")
@@ -633,11 +636,8 @@ def register_create_handlers(bot):
         else:
             srv = get_server_details(server_id)
             if srv:
-                # srv[4] هو الهوست الحقيقي المحفوظ في قاعدة البيانات
-                raw_host = srv[4] 
-                if raw_host.startswith("ftp-"):
-                    raw_host = raw_host[4:]
-                host_domain = raw_host
+                s_user = srv[5].strip()
+                host_domain = f"{s_user}.alwaysdata.net"
         
         if selected_port == 443:
             security_type = "tls"
